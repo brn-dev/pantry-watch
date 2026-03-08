@@ -4,6 +4,8 @@ import type { Household, PantryLocation } from "@shared/models";
 import OverviewPage from "./pages/OverviewPage.vue";
 import QuickAddPage from "./pages/QuickAddPage.vue";
 import AiChefPage from "./pages/AiChefPage.vue";
+import RoughButton from "./components/RoughButton.vue";
+import RoughPanel from "./components/RoughPanel.vue";
 import type { ParsedItem } from "./types/quickAdd";
 import { t, type Language, type TranslationKey } from "./i18n";
 
@@ -17,6 +19,13 @@ type RecordingTextResponse = {
 
 type ParsedItemsResponse = {
   items: Omit<ParsedItem, "id">[];
+};
+
+type CreateOverviewItemInput = {
+  name: string;
+  quantity: number;
+  unit: string;
+  expirationDate: string | null;
 };
 
 const households = ref<Household[]>([]);
@@ -308,6 +317,118 @@ async function decreaseOverviewItem(householdId: string, itemId: string, current
   }
 }
 
+async function createOverviewLocation(householdId: string, locationName: string): Promise<void> {
+  householdsError.value = "";
+
+  try {
+    const response = await fetch(`/api/households/${householdId}/locations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name: locationName.trim() })
+    });
+
+    if (!response.ok) {
+      throw new Error(translate("failedCreateLocation", { name: locationName, status: response.status }));
+    }
+
+    await loadHouseholds();
+  } catch (error) {
+    householdsError.value = error instanceof Error ? error.message : translate("failedLoadHouseholdsGeneric");
+  }
+}
+
+async function createOverviewItem(
+  householdId: string,
+  locationId: string,
+  input: CreateOverviewItemInput
+): Promise<void> {
+  householdsError.value = "";
+
+  try {
+    const response = await fetch(`/api/households/${householdId}/locations/${locationId}/items`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: input.name.trim(),
+        quantity: input.quantity,
+        unit: input.unit.trim() || "pcs",
+        expirationDate: input.expirationDate
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(translate("failedAddItem", { name: input.name, status: response.status }));
+    }
+
+    await loadHouseholds();
+  } catch (error) {
+    householdsError.value = error instanceof Error ? error.message : translate("failedLoadHouseholdsGeneric");
+  }
+}
+
+async function updateOverviewItem(
+  householdId: string,
+  itemId: string,
+  input: CreateOverviewItemInput
+): Promise<void> {
+  householdsError.value = "";
+
+  try {
+    const response = await fetch(`/api/households/${householdId}/items/${itemId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: input.name.trim(),
+        quantity: input.quantity,
+        unit: input.unit.trim() || "pcs",
+        expirationDate: input.expirationDate
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update item (${response.status})`);
+    }
+
+    await loadHouseholds();
+  } catch (error) {
+    householdsError.value = error instanceof Error ? error.message : "Failed to update item";
+  }
+}
+
+async function updateOverviewItemExpiration(
+  householdId: string,
+  itemId: string,
+  expirationDate: string | null
+): Promise<void> {
+  householdsError.value = "";
+
+  try {
+    const response = await fetch(`/api/households/${householdId}/items/${itemId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        expirationDate
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update expiration date (${response.status})`);
+    }
+
+    await loadHouseholds();
+  } catch (error) {
+    householdsError.value = error instanceof Error ? error.message : "Failed to update expiration date";
+  }
+}
+
 function updateSelectedHouseholdId(nextHouseholdId: string): void {
   selectedHouseholdId.value = nextHouseholdId;
 }
@@ -350,71 +471,59 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-br from-slate-100 via-sky-50 to-amber-50 text-slate-900">
-    <header class="sticky top-0 z-30 border-b border-slate-700 bg-slate-900/95 px-4 py-3 text-slate-100 shadow-sm backdrop-blur">
+  <main class="min-h-screen w-full max-w-full overflow-x-hidden text-[var(--ink-main)]">
+    <header class="sticky top-0 z-30 border-b border-[#6f5a47]/40 bg-[#f8efda]/94 px-4 py-3 shadow-sm backdrop-blur">
       <div class="mx-auto flex w-full min-w-0 max-w-7xl items-center gap-2">
-        <button
-          class="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 md:hidden"
+        <RoughButton
+          class="md:hidden"
           @click="toggleMobileSidebar"
           aria-label="Toggle navigation"
         >
           ☰
-        </button>
-        <h1 class="min-w-0 truncate text-lg font-extrabold tracking-tight text-white sm:text-xl">{{ translate("appTitle") }}</h1>
+        </RoughButton>
+        <h1 class="min-w-0 truncate text-3xl font-bold tracking-tight text-[#3e3023] sm:text-4xl">{{ translate("appTitle") }}</h1>
         <nav class="ml-4 hidden gap-2 md:flex">
-          <button
-            class="rounded-md border px-3 py-2 text-left text-sm transition"
-            :class="
-              activePage === 'overview'
-                ? 'border-sky-300 bg-sky-300 text-slate-950 font-semibold'
-                : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
-            "
+          <RoughButton
+            class="text-left text-sm"
+            :fill="activePage === 'overview' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/overview')"
           >
             {{ translate("overview") }}
-          </button>
-          <button
-            class="rounded-md border px-3 py-2 text-left text-sm transition"
-            :class="
-              activePage === 'quick-add'
-                ? 'border-sky-300 bg-sky-300 text-slate-950 font-semibold'
-                : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
-            "
+          </RoughButton>
+          <RoughButton
+            class="text-left text-sm"
+            :fill="activePage === 'quick-add' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/quick-add')"
           >
             {{ translate("quickAdd") }}
-          </button>
-          <button
-            class="rounded-md border px-3 py-2 text-left text-sm transition"
-            :class="
-              activePage === 'ai-chef'
-                ? 'border-sky-300 bg-sky-300 text-slate-950 font-semibold'
-                : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
-            "
+          </RoughButton>
+          <RoughButton
+            class="text-left text-sm"
+            :fill="activePage === 'ai-chef' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/ai-chef')"
           >
             {{ translate("aiChef") }}
-          </button>
+          </RoughButton>
         </nav>
         <div class="ml-auto hidden items-center gap-1 md:flex">
-          <button
-            class="rounded border px-2 py-1 text-sm leading-none transition"
-            :class="language === 'en' ? 'border-sky-300 bg-sky-300 text-slate-950' : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'"
+          <RoughButton
+            class="px-2 py-1 text-sm leading-none"
+            :fill="language === 'en' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="updateLanguage('en')"
             title="English"
             aria-label="English"
           >
             🇬🇧
-          </button>
-          <button
-            class="rounded border px-2 py-1 text-sm leading-none transition"
-            :class="language === 'de' ? 'border-sky-300 bg-sky-300 text-slate-950' : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'"
+          </RoughButton>
+          <RoughButton
+            class="px-2 py-1 text-sm leading-none"
+            :fill="language === 'de' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="updateLanguage('de')"
             title="Deutsch"
             aria-label="Deutsch"
           >
             🇩🇪
-          </button>
+          </RoughButton>
         </div>
       </div>
     </header>
@@ -446,76 +555,64 @@ onUnmounted(() => {
       >
         <aside
           v-if="isMobileSidebarOpen"
-          class="pointer-events-auto absolute left-0 top-0 h-full w-72 border-r border-slate-700 bg-slate-900 p-4 text-slate-100 shadow-2xl"
+          class="pointer-events-auto absolute left-0 top-0 h-full w-72 border-r border-[#6f5a47]/50 bg-[#f6ecd5] p-4 shadow-2xl"
         >
           <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-lg font-bold">{{ translate("appTitle") }}</h2>
-            <button class="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm" @click="closeMobileSidebar">✕</button>
+            <h2 class="text-3xl font-bold">{{ translate("appTitle") }}</h2>
+            <RoughButton class="px-2 py-1 text-sm" @click="closeMobileSidebar">✕</RoughButton>
           </div>
 
           <nav class="space-y-2">
-            <button
-              class="w-full rounded-md border px-3 py-2 text-left text-sm transition"
-              :class="
-                activePage === 'overview'
-                  ? 'border-sky-300 bg-sky-300 text-slate-950 font-semibold'
-                  : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
-              "
+            <RoughButton
+              class="w-full text-left text-sm"
+              :fill="activePage === 'overview' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/overview')"
             >
               {{ translate("overview") }}
-            </button>
-            <button
-              class="w-full rounded-md border px-3 py-2 text-left text-sm transition"
-              :class="
-                activePage === 'quick-add'
-                  ? 'border-sky-300 bg-sky-300 text-slate-950 font-semibold'
-                  : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
-              "
+            </RoughButton>
+            <RoughButton
+              class="w-full text-left text-sm"
+              :fill="activePage === 'quick-add' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/quick-add')"
             >
               {{ translate("quickAdd") }}
-            </button>
-            <button
-              class="w-full rounded-md border px-3 py-2 text-left text-sm transition"
-              :class="
-                activePage === 'ai-chef'
-                  ? 'border-sky-300 bg-sky-300 text-slate-950 font-semibold'
-                  : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
-              "
+            </RoughButton>
+            <RoughButton
+              class="w-full text-left text-sm"
+              :fill="activePage === 'ai-chef' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/ai-chef')"
             >
               {{ translate("aiChef") }}
-            </button>
+            </RoughButton>
           </nav>
 
           <div class="mt-6 flex items-center gap-2">
-            <button
-              class="rounded border px-2 py-1 text-sm leading-none transition"
-              :class="language === 'en' ? 'border-sky-300 bg-sky-300 text-slate-950' : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'"
+            <RoughButton
+              class="px-2 py-1 text-sm leading-none"
+              :fill="language === 'en' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="updateLanguage('en')"
               title="English"
               aria-label="English"
             >
               🇬🇧
-            </button>
-            <button
-              class="rounded border px-2 py-1 text-sm leading-none transition"
-              :class="language === 'de' ? 'border-sky-300 bg-sky-300 text-slate-950' : 'border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'"
+            </RoughButton>
+            <RoughButton
+              class="px-2 py-1 text-sm leading-none"
+              :fill="language === 'de' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="updateLanguage('de')"
               title="Deutsch"
               aria-label="Deutsch"
             >
               🇩🇪
-            </button>
+            </RoughButton>
           </div>
         </aside>
       </Transition>
     </div>
 
     <section class="mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6">
-      <header class="mb-4">
-        <h2 class="text-xl font-semibold tracking-tight sm:text-2xl">
+      <RoughPanel class="mb-4">
+        <h2 class="text-3xl font-semibold tracking-tight sm:text-4xl">
           {{
             activePage === "overview"
               ? translate("overview")
@@ -524,10 +621,10 @@ onUnmounted(() => {
                 : translate("aiChef")
           }}
         </h2>
-      </header>
+      </RoughPanel>
 
-      <p v-if="loadingHouseholds" class="text-sm text-slate-700">{{ translate("loadingHouseholds") }}</p>
-      <p v-else-if="householdsError" class="text-sm font-medium text-rose-700">{{ householdsError }}</p>
+      <p v-if="loadingHouseholds" class="scribble-text">{{ translate("loadingHouseholds") }}</p>
+      <p v-else-if="householdsError" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
 
       <template v-if="!loadingHouseholds && !householdsError">
         <OverviewPage
@@ -535,6 +632,10 @@ onUnmounted(() => {
           :households="households"
           :language="language"
           :on-decrease-item="decreaseOverviewItem"
+          :on-create-location="createOverviewLocation"
+          :on-create-item="createOverviewItem"
+          :on-update-item="updateOverviewItem"
+          :on-update-item-expiration="updateOverviewItemExpiration"
         />
 
         <QuickAddPage

@@ -2,13 +2,82 @@
 import { ref } from "vue";
 import type { Household, PantryItem } from "@shared/models";
 import { t, type Language } from "../i18n";
+import RoughButton from "../components/RoughButton.vue";
+import RoughPanel from "../components/RoughPanel.vue";
+import AddItemModal from "../components/AddItemModal.vue";
+import AddLocationModal from "../components/AddLocationModal.vue";
+import EditExpirationModal from "../components/EditExpirationModal.vue";
 
 const processingItemIds = ref<Record<string, boolean>>({});
+const processingLocationIds = ref<Record<string, boolean>>({});
+const processingHouseholdIds = ref<Record<string, boolean>>({});
+const collapsedLocationIds = ref<Record<string, boolean>>({});
+const addItemModal = ref<{
+  open: boolean;
+  householdId: string;
+  locationId: string;
+  locationName: string;
+}>({
+  open: false,
+  householdId: "",
+  locationId: "",
+  locationName: ""
+});
+const editItemModal = ref<{
+  open: boolean;
+  householdId: string;
+  itemId: string;
+  initialItem: {
+    name: string;
+    quantity: number;
+    unit: string;
+    expirationDate: string | null;
+  } | null;
+}>({
+  open: false,
+  householdId: "",
+  itemId: "",
+  initialItem: null
+});
+const addLocationModal = ref<{
+  open: boolean;
+  householdId: string;
+  householdName: string;
+}>({
+  open: false,
+  householdId: "",
+  householdName: ""
+});
+const editExpirationModal = ref<{
+  open: boolean;
+  householdId: string;
+  itemId: string;
+  itemName: string;
+  expirationDate: string | null;
+}>({
+  open: false,
+  householdId: "",
+  itemId: "",
+  itemName: "",
+  expirationDate: null
+});
 
 const props = defineProps<{
   households: Household[];
   language: Language;
   onDecreaseItem: (householdId: string, itemId: string, currentQuantity: number) => Promise<void>;
+  onCreateLocation: (householdId: string, locationName: string) => Promise<void>;
+  onCreateItem: (
+    householdId: string,
+    locationId: string,
+    input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+  ) => Promise<void>;
+  onUpdateItem: (
+    householdId: string,
+    itemId: string,
+    input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+  ) => Promise<void>;
+  onUpdateItemExpiration: (householdId: string, itemId: string, expirationDate: string | null) => Promise<void>;
 }>();
 
 function parseDateOnly(value: string): Date {
@@ -63,20 +132,31 @@ function getExpirationLabel(expirationDate: string | null): string {
 
 function getExpirationClass(expirationDate: string | null): string {
   if (!expirationDate) {
-    return "border-slate-200 bg-slate-100 text-slate-700";
+    return "border-[#7f6a55]/40 bg-[#f3ead2] text-[#574739]";
   }
 
   const dayDifference = getDayDifferenceFromToday(expirationDate);
   if (dayDifference < 0) {
-    return "border-purple-200 bg-purple-100 text-purple-800";
+    return "border-[#8e3f37]/45 bg-[#f4d9d5] text-[#6e2f28]";
   }
   if (dayDifference < 3) {
-    return "border-rose-200 bg-rose-100 text-rose-800";
+    return "border-[#b75f3f]/45 bg-[#fae2d5] text-[#7f432d]";
   }
   if (dayDifference < 7) {
-    return "border-amber-200 bg-amber-100 text-amber-800";
+    return "border-[#b08a43]/45 bg-[#f7ecd2] text-[#745a2b]";
   }
-  return "border-emerald-200 bg-emerald-100 text-emerald-800";
+  return "border-[#5b8f6a]/45 bg-[#dff0e3] text-[#2f6040]";
+}
+
+function isLocationCollapsed(locationId: string): boolean {
+  return !!collapsedLocationIds.value[locationId];
+}
+
+function toggleLocationCollapsed(locationId: string): void {
+  collapsedLocationIds.value = {
+    ...collapsedLocationIds.value,
+    [locationId]: !isLocationCollapsed(locationId)
+  };
 }
 
 async function handleDecreaseItem(householdId: string, itemId: string, currentQuantity: number): Promise<void> {
@@ -97,57 +177,345 @@ async function handleDecreaseItem(householdId: string, itemId: string, currentQu
     processingItemIds.value = nextState;
   }
 }
+
+async function handleAddLocation(householdId: string): Promise<void> {
+  const household = props.households.find((candidate) => candidate.id === householdId);
+  if (!household) {
+    return;
+  }
+
+  addLocationModal.value = {
+    open: true,
+    householdId,
+    householdName: household.name
+  };
+}
+
+function closeAddLocationModal(): void {
+  if (processingHouseholdIds.value[addLocationModal.value.householdId]) {
+    return;
+  }
+
+  addLocationModal.value = {
+    open: false,
+    householdId: "",
+    householdName: ""
+  };
+}
+
+async function handleAddLocationSubmit(locationName: string): Promise<void> {
+  const householdId = addLocationModal.value.householdId;
+  if (!householdId || processingHouseholdIds.value[householdId]) {
+    return;
+  }
+
+  processingHouseholdIds.value = {
+    ...processingHouseholdIds.value,
+    [householdId]: true
+  };
+
+  try {
+    await props.onCreateLocation(householdId, locationName.trim());
+    closeAddLocationModal();
+  } finally {
+    const nextState = { ...processingHouseholdIds.value };
+    delete nextState[householdId];
+    processingHouseholdIds.value = nextState;
+  }
+}
+
+async function handleAddItem(householdId: string, locationId: string): Promise<void> {
+  const household = props.households.find((candidate) => candidate.id === householdId);
+  const location = household?.locations.find((candidate) => candidate.id === locationId);
+  if (!location) {
+    return;
+  }
+
+  addItemModal.value = {
+    open: true,
+    householdId,
+    locationId,
+    locationName: location.name
+  };
+}
+
+function closeAddItemModal(): void {
+  if (processingLocationIds.value[addItemModal.value.locationId]) {
+    return;
+  }
+
+  addItemModal.value = {
+    open: false,
+    householdId: "",
+    locationId: "",
+    locationName: ""
+  };
+}
+
+async function handleAddItemSubmit(
+  input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+): Promise<void> {
+  const householdId = addItemModal.value.householdId;
+  const locationId = addItemModal.value.locationId;
+
+  if (!householdId || !locationId || processingLocationIds.value[locationId]) {
+    return;
+  }
+
+  if (processingLocationIds.value[locationId]) {
+    return;
+  }
+
+  processingLocationIds.value = {
+    ...processingLocationIds.value,
+    [locationId]: true
+  };
+
+  try {
+    await props.onCreateItem(householdId, locationId, {
+      name: input.name,
+      quantity: input.quantity,
+      unit: input.unit,
+      expirationDate: input.expirationDate
+    });
+    closeAddItemModal();
+  } finally {
+    const nextState = { ...processingLocationIds.value };
+    delete nextState[locationId];
+    processingLocationIds.value = nextState;
+  }
+}
+
+function openEditItemModal(householdId: string, item: PantryItem): void {
+  if (processingItemIds.value[item.id]) {
+    return;
+  }
+
+  editItemModal.value = {
+    open: true,
+    householdId,
+    itemId: item.id,
+    initialItem: {
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      expirationDate: item.expirationDate
+    }
+  };
+}
+
+function closeEditItemModal(): void {
+  if (processingItemIds.value[editItemModal.value.itemId]) {
+    return;
+  }
+
+  editItemModal.value = {
+    open: false,
+    householdId: "",
+    itemId: "",
+    initialItem: null
+  };
+}
+
+async function handleEditItemSubmit(
+  input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+): Promise<void> {
+  const householdId = editItemModal.value.householdId;
+  const itemId = editItemModal.value.itemId;
+  if (!householdId || !itemId || processingItemIds.value[itemId]) {
+    return;
+  }
+
+  processingItemIds.value = {
+    ...processingItemIds.value,
+    [itemId]: true
+  };
+
+  try {
+    await props.onUpdateItem(householdId, itemId, input);
+    closeEditItemModal();
+  } finally {
+    const nextState = { ...processingItemIds.value };
+    delete nextState[itemId];
+    processingItemIds.value = nextState;
+  }
+}
+
+function openEditExpirationModal(householdId: string, item: PantryItem): void {
+  if (processingItemIds.value[item.id]) {
+    return;
+  }
+
+  editExpirationModal.value = {
+    open: true,
+    householdId,
+    itemId: item.id,
+    itemName: item.name,
+    expirationDate: item.expirationDate
+  };
+}
+
+function closeEditExpirationModal(): void {
+  if (processingItemIds.value[editExpirationModal.value.itemId]) {
+    return;
+  }
+
+  editExpirationModal.value = {
+    open: false,
+    householdId: "",
+    itemId: "",
+    itemName: "",
+    expirationDate: null
+  };
+}
+
+async function handleEditExpirationSubmit(expirationDate: string | null): Promise<void> {
+  const householdId = editExpirationModal.value.householdId;
+  const itemId = editExpirationModal.value.itemId;
+  if (!householdId || !itemId || processingItemIds.value[itemId]) {
+    return;
+  }
+
+  processingItemIds.value = {
+    ...processingItemIds.value,
+    [itemId]: true
+  };
+
+  try {
+    await props.onUpdateItemExpiration(householdId, itemId, expirationDate);
+    closeEditExpirationModal();
+  } finally {
+    const nextState = { ...processingItemIds.value };
+    delete nextState[itemId];
+    processingItemIds.value = nextState;
+  }
+}
 </script>
 
 <template>
-  <section class="w-full max-w-full space-y-4 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg shadow-slate-200/50 sm:p-5">
+  <RoughPanel class="w-full max-w-full space-y-4">
     <article
       v-for="household in households"
       :key="household.id"
-      class="space-y-3 border-b border-slate-100 pb-4 last:border-b-0 last:pb-0"
+      class="space-y-3 border-b border-[#7f6a55]/20 pb-4 last:border-b-0 last:pb-0"
     >
+      <div class="flex items-start justify-between gap-3">
+        <h3 class="text-3xl font-semibold text-[#3f3024]">{{ household.name }}</h3>
+        <RoughButton
+          class="ml-auto px-2 py-1 text-xl leading-none"
+          :disabled="!!processingHouseholdIds[household.id]"
+          :title="t(props.language, 'addLocation')"
+          @click="handleAddLocation(household.id)"
+        >
+          +
+        </RoughButton>
+      </div>
       <div>
-        <h3 class="text-lg font-semibold text-slate-900">{{ household.name }}</h3>
-        <p class="text-sm text-slate-500">{{ t(props.language, "idLabel") }}: {{ household.id }}</p>
+        <p class="scribble-text">{{ t(props.language, "idLabel") }}: {{ household.id }}</p>
       </div>
 
       <div v-if="household.locations.length" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <div v-for="location in household.locations" :key="location.id" class="rounded-xl border border-sky-100 bg-sky-50/50 p-3">
-          <h4 class="mb-2 font-semibold text-sky-900">{{ location.name }}</h4>
-          <ul v-if="location.items.length" class="space-y-2 text-sm text-slate-800">
+        <RoughPanel v-for="location in household.locations" :key="location.id" class="p-1" fill="rgba(255, 251, 241, 0.78)">
+          <div class="mb-2 flex items-start justify-between gap-2">
+            <h4 class="text-2xl font-semibold text-[#3c3127]">{{ location.name }}</h4>
+            <div class="ml-auto flex items-center gap-1">
+              <RoughButton
+                class="px-2 py-1 text-xl leading-none"
+                :title="isLocationCollapsed(location.id) ? 'Expand items' : 'Collapse items'"
+                @click="toggleLocationCollapsed(location.id)"
+              >
+                {{ isLocationCollapsed(location.id) ? "▸" : "▾" }}
+              </RoughButton>
+              <RoughButton
+                class="px-2 py-1 text-xl leading-none"
+                :disabled="!!processingLocationIds[location.id]"
+                :title="t(props.language, 'addItem')"
+                @click="handleAddItem(household.id, location.id)"
+              >
+                +
+              </RoughButton>
+            </div>
+          </div>
+          <ul v-if="!isLocationCollapsed(location.id) && location.items.length" class="space-y-2 text-sm text-[#3a2f25]">
             <li
               v-for="item in sortItemsByExpirationDate(location.items)"
               :key="item.id"
-              class="flex items-start justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+              class="flex items-start justify-between gap-2 rounded-lg border border-[#7c6854]/35 bg-[#fffaf0]/90 px-2 py-1.5"
             >
               <div class="min-w-0">
-                <p class="break-words text-lg font-semibold">
+                <p
+                  class="break-words text-lg font-semibold"
+                  :title="t(props.language, 'editItem')"
+                  @dblclick="openEditItemModal(household.id, item)"
+                >
                   {{ item.name }}
-                  <span class="text-sm font-medium text-slate-500">({{ item.unit }})</span>
+                  <span class="text-sm font-medium text-[#65584a]">({{ item.unit }})</span>
                 </p>
-                <span
-                  class="mt-1 inline-flex self-start rounded-full border px-2 py-0.5 text-xs font-medium sm:self-auto"
+                <button
+                  type="button"
+                  class="notebook-pill mt-1 inline-flex self-start border px-2 py-0.5 text-xs font-medium sm:self-auto"
                   :class="getExpirationClass(item.expirationDate)"
+                  :disabled="!!processingItemIds[item.id]"
+                  :title="t(props.language, 'editExpirationDate')"
+                  @click="openEditExpirationModal(household.id, item)"
                 >
                   {{ getExpirationLabel(item.expirationDate) }}
-                </span>
+                </button>
               </div>
               <div class="ml-auto flex items-center gap-2">
-                <span class="text-lg font-bold text-slate-700">{{ item.quantity }}</span>
-                <button
-                  class="rounded-md border border-slate-300 bg-slate-100 px-3 py-1 text-lg font-bold leading-none text-slate-800 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                <span class="text-lg font-bold text-[#4f4234]">{{ item.quantity }}</span>
+                <RoughButton
+                  class="px-3 py-1 text-lg font-bold leading-none"
                   :disabled="!!processingItemIds[item.id]"
                   @click="handleDecreaseItem(household.id, item.id, item.quantity)"
                 >
                   -
-                </button>
+                </RoughButton>
               </div>
             </li>
           </ul>
-          <p v-else class="text-sm text-slate-500">{{ t(props.language, "noItemsYet") }}</p>
-        </div>
+          <p v-else-if="!isLocationCollapsed(location.id)" class="scribble-text">{{ t(props.language, "noItemsYet") }}</p>
+        </RoughPanel>
       </div>
-      <p v-else class="text-sm text-slate-500">{{ t(props.language, "noLocationsYet") }}</p>
+      <p v-else class="scribble-text">{{ t(props.language, "noLocationsYet") }}</p>
     </article>
-  </section>
+  </RoughPanel>
+
+  <AddItemModal
+    :open="addItemModal.open"
+    :language="language"
+    :location-name="addItemModal.locationName"
+    :submitting="!!processingLocationIds[addItemModal.locationId]"
+    @close="closeAddItemModal"
+    @submit="handleAddItemSubmit"
+  />
+
+  <AddItemModal
+    :open="editItemModal.open"
+    :language="language"
+    mode="edit"
+    :initial-item="editItemModal.initialItem"
+    :submitting="!!processingItemIds[editItemModal.itemId]"
+    @close="closeEditItemModal"
+    @submit="handleEditItemSubmit"
+  />
+
+  <AddLocationModal
+    :open="addLocationModal.open"
+    :language="language"
+    :household-name="addLocationModal.householdName"
+    :submitting="!!processingHouseholdIds[addLocationModal.householdId]"
+    @close="closeAddLocationModal"
+    @submit="handleAddLocationSubmit"
+  />
+
+  <EditExpirationModal
+    :open="editExpirationModal.open"
+    :language="language"
+    :item-name="editExpirationModal.itemName"
+    :initial-expiration-date="editExpirationModal.expirationDate"
+    :submitting="!!processingItemIds[editExpirationModal.itemId]"
+    @close="closeEditExpirationModal"
+    @submit="handleEditExpirationSubmit"
+  />
 </template>

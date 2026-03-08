@@ -1,4 +1,15 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&display=swap");
+
+:root {
+  --ink-main: #2f241b;
+  --ink-muted: #5f5247;
+  --paper-base: #faf3df;
+  --paper-shadow: #f1e6cb;
+  --line-blue: rgba(90, 135, 168, 0.28);
+  --line-red: rgba(193, 90, 82, 0.32);
+  --rough-stroke: #4f4235;
+}
 
 *,
 *::before,
@@ -16,4 +27,88 @@ body,
 
 body {
   margin: 0;
+  color: var(--ink-main);
+  font-family: "Patrick Hand", "Comic Sans MS", cursive;
+  background-color: var(--paper-base);
+  background-image:
+    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.7) 0, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(to right, transparent 0 3.8rem, var(--line-red) 3.8rem 4.05rem, transparent 4.05rem 100%),
+    repeating-linear-gradient(to bottom, transparent 0 2.05rem, var(--line-blue) 2.05rem 2.14rem, transparent 2.14rem 4.22rem),
+    linear-gradient(180deg, var(--paper-base) 0%, var(--paper-shadow) 100%);
+  background-attachment: fixed;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Caveat", "Patrick Hand", cursive;
+  letter-spacing: 0.015em;
+}
+
+input,
+select,
+textarea {
+  border: 2px solid rgba(80, 67, 54, 0.6);
+  border-radius: 0.8rem 0.68rem 0.9rem 0.66rem;
+  background-color: rgba(255, 251, 240, 0.9);
+  color: var(--ink-main);
+  box-shadow: 0 1px 0 rgba(53, 44, 36, 0.2);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(127, 88, 55, 0.95);
+  box-shadow: 0 0 0 2px rgba(227, 197, 137, 0.45);
+}
+
+.rough-panel {
+  border-radius: 1rem;
+}
+
+.rough-panel-content {
+  padding: 0.9rem;
+}
+
+.rough-button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-main);
+  font-family: "Patrick Hand", "Comic Sans MS", cursive;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.85rem;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.rough-button:hover {
+  transform: translateY(-1px) rotate(-0.4deg);
+}
+
+.rough-button:active {
+  transform: translateY(0) rotate(0.35deg);
+}
+
+.rough-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.notebook-pill {
+  border: 2px solid rgba(77, 65, 52, 0.55);
+  border-radius: 999px;
+  padding: 0.12rem 0.58rem;
+  background: rgba(255, 250, 237, 0.86);
+}
+
+.scribble-text {
+  color: var(--ink-muted);
+  font-size: 1.02rem;
 }

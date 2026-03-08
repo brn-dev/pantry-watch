@@ -2,6 +2,9 @@
 import { computed, ref, watch } from "vue";
 import type { Household } from "@shared/models";
 import { t, type Language } from "../i18n";
+import RoughButton from "../components/RoughButton.vue";
+import RoughPanel from "../components/RoughPanel.vue";
+import VoiceRecorderButton from "../components/VoiceRecorderButton.vue";
 
 type ChatRole = "user" | "assistant";
 
@@ -40,6 +43,8 @@ const aiChefStatus = ref("");
 const aiChefError = ref("");
 const sendingMessage = ref(false);
 const itemsSectionOpen = ref(false);
+const recorderMessage = ref("");
+const recorderErrorMessage = ref("");
 
 const householdItems = computed<HouseholdItem[]>(() => {
   const selectedIdSet = new Set(selectedHouseholdIds.value);
@@ -114,20 +119,20 @@ function getExpirationLabel(expirationDate: string | null): string {
 
 function getExpirationClass(expirationDate: string | null): string {
   if (!expirationDate) {
-    return "border-slate-200 bg-slate-100 text-slate-700";
+    return "border-[#7f6a55]/40 bg-[#f3ead2] text-[#574739]";
   }
 
   const dayDifference = getDayDifferenceFromToday(expirationDate);
   if (dayDifference < 0) {
-    return "border-purple-200 bg-purple-100 text-purple-800";
+    return "border-[#8e3f37]/45 bg-[#f4d9d5] text-[#6e2f28]";
   }
   if (dayDifference < 3) {
-    return "border-rose-200 bg-rose-100 text-rose-800";
+    return "border-[#b75f3f]/45 bg-[#fae2d5] text-[#7f432d]";
   }
   if (dayDifference < 7) {
-    return "border-amber-200 bg-amber-100 text-amber-800";
+    return "border-[#b08a43]/45 bg-[#f7ecd2] text-[#745a2b]";
   }
-  return "border-emerald-200 bg-emerald-100 text-emerald-800";
+  return "border-[#5b8f6a]/45 bg-[#dff0e3] text-[#2f6040]";
 }
 
 watch(
@@ -192,6 +197,37 @@ function toggleItemsSection(): void {
   itemsSectionOpen.value = !itemsSectionOpen.value;
 }
 
+function handleRecordingStart(): void {
+  recorderErrorMessage.value = "";
+  recorderMessage.value = t(props.language, "recordingStarted");
+}
+
+function handleRecordingStop(): void {
+  recorderErrorMessage.value = "";
+  recorderMessage.value = t(props.language, "recordingStopped");
+
+  const placeholderText = t(props.language, "voiceTextPlaceholder");
+  userMessage.value = userMessage.value.trim()
+    ? `${userMessage.value.trim()}\n${placeholderText}`
+    : placeholderText;
+}
+
+function handleRecordingError(code: "not_supported" | "permission_denied" | "recording_failed"): void {
+  recorderMessage.value = "";
+
+  if (code === "not_supported") {
+    recorderErrorMessage.value = t(props.language, "recordingNotSupported");
+    return;
+  }
+
+  if (code === "permission_denied") {
+    recorderErrorMessage.value = t(props.language, "recordingPermissionDenied");
+    return;
+  }
+
+  recorderErrorMessage.value = t(props.language, "recordingFailed");
+}
+
 async function sendMessage(): Promise<void> {
   const prompt = userMessage.value.trim();
   if (!prompt) {
@@ -245,16 +281,16 @@ async function sendMessage(): Promise<void> {
 </script>
 
 <template>
-  <section class="w-full max-w-full space-y-4 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg shadow-slate-200/50 sm:p-5">
+  <RoughPanel class="w-full max-w-full space-y-4">
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="min-w-0 space-y-3">
         <div>
-          <p class="mb-2 text-sm font-semibold text-slate-700">{{ t(props.language, "households") }}</p>
-          <div class="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+          <p class="mb-2 text-base font-semibold text-[#4f4134]">{{ t(props.language, "households") }}</p>
+          <div class="space-y-2 rounded-md border border-[#7f6a55]/35 bg-[#fffaf0]/80 p-2">
             <label
               v-for="household in households"
               :key="household.id"
-              class="flex cursor-pointer items-center gap-2 rounded border border-slate-200 bg-white p-2 text-sm"
+              class="flex cursor-pointer items-center gap-2 rounded border border-[#7f6a55]/35 bg-[#fffdf4] p-2 text-sm"
             >
               <input
                 type="checkbox"
@@ -268,34 +304,34 @@ async function sendMessage(): Promise<void> {
         </div>
 
         <div class="flex flex-col gap-2 sm:flex-row">
-          <button
-            class="w-full rounded-md border border-sky-700 bg-sky-700 px-3 py-2 text-xs font-medium text-white hover:bg-sky-800 sm:w-auto"
+          <RoughButton
+            class="w-full px-3 py-2 text-xs font-medium sm:w-auto"
             @click="selectAllItems"
           >
             {{ t(props.language, "selectAll") }}
-          </button>
-          <button
-            class="w-full rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-200 sm:w-auto"
+          </RoughButton>
+          <RoughButton
+            class="w-full px-3 py-2 text-xs font-medium sm:w-auto"
             @click="clearSelectedItems"
           >
             {{ t(props.language, "clearSelection") }}
-          </button>
+          </RoughButton>
         </div>
 
-        <div class="rounded-md border border-slate-200 bg-slate-50">
-          <button
-            class="flex w-full items-center justify-between rounded-t-md px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        <div class="rounded-md border border-[#7f6a55]/35 bg-[#fffaf0]/80">
+          <RoughButton
+            class="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold text-[#4f4134]"
             @click="toggleItemsSection"
           >
             <span>{{ t(props.language, "selectItems") }} ({{ selectedItemIds.length }}/{{ householdItems.length }})</span>
             <span class="text-xs">{{ itemsSectionOpen ? "▲" : "▼" }}</span>
-          </button>
+          </RoughButton>
 
-          <div v-if="itemsSectionOpen" class="max-h-56 space-y-2 overflow-auto border-t border-slate-200 p-2 sm:max-h-64">
+          <div v-if="itemsSectionOpen" class="max-h-56 space-y-2 overflow-auto border-t border-[#7f6a55]/25 p-2 sm:max-h-64">
             <label
               v-for="item in householdItems"
               :key="item.id"
-              class="flex cursor-pointer items-start gap-2 rounded border border-slate-200 bg-white p-2 text-sm"
+              class="flex cursor-pointer items-start gap-2 rounded border border-[#7f6a55]/35 bg-[#fffdf4] p-2 text-sm"
             >
               <input
                 type="checkbox"
@@ -305,9 +341,9 @@ async function sendMessage(): Promise<void> {
               />
               <span class="break-words">
                 <strong>{{ item.quantity }} {{ item.unit }} {{ item.name }}</strong>
-                <span class="text-slate-500"> ({{ item.householdName }} / {{ item.locationName }})</span>
+                <span class="text-[#6a5b4c]"> ({{ item.householdName }} / {{ item.locationName }})</span>
                 <span
-                  class="ml-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-medium"
+                  class="notebook-pill ml-1 inline-flex border px-2 py-0.5 text-xs font-medium"
                   :class="getExpirationClass(item.expirationDate)"
                 >
                   {{ getExpirationLabel(item.expirationDate) }}
@@ -319,64 +355,82 @@ async function sendMessage(): Promise<void> {
       </div>
 
       <div class="min-w-0 space-y-3">
-        <label class="block text-sm font-semibold text-slate-700">
+        <label class="block text-base font-semibold text-[#4f4134]">
           {{ t(props.language, "extraIngredients") }}
           <input
             v-model="extraIngredients"
-            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            class="mt-1 w-full px-3 py-2 text-sm"
             :placeholder="t(props.language, 'extraIngredientsPlaceholder')"
           />
         </label>
 
-        <label class="block text-sm font-semibold text-slate-700">
+        <label class="block text-base font-semibold text-[#4f4134]">
           {{ t(props.language, "additionalContext") }}
           <textarea
             v-model="additionalContext"
             rows="4"
-            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            class="mt-1 w-full px-3 py-2 text-sm"
             :placeholder="t(props.language, 'additionalContextPlaceholder')"
           />
         </label>
       </div>
     </div>
 
-    <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-      <h3 class="text-sm font-semibold text-slate-800">{{ t(props.language, "aiChefChat") }}</h3>
+    <RoughPanel class="space-y-3" fill="rgba(255, 250, 239, 0.78)">
+      <h3 class="text-2xl font-semibold text-[#3f3225]">{{ t(props.language, "aiChefChat") }}</h3>
 
       <div class="max-h-64 space-y-2 overflow-auto sm:max-h-80">
         <div
           v-for="(message, index) in chatMessages"
           :key="index"
           class="rounded-md border p-2 text-sm"
-          :class="message.role === 'assistant' ? 'border-sky-200 bg-sky-50' : 'border-slate-200 bg-white'"
+          :class="
+            message.role === 'assistant'
+              ? 'border-[#8da6b8] bg-[#ecf6ff]'
+              : 'border-[#7f6a55]/35 bg-[#fffdf4]'
+          "
         >
-          <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6a5b4c]">
             {{ message.role === "assistant" ? t(props.language, "aiChefAssistant") : t(props.language, "you") }}
           </p>
           <p class="whitespace-pre-wrap break-words">{{ message.content }}</p>
         </div>
       </div>
 
-      <label class="block text-sm font-semibold text-slate-700">
+      <label class="block text-base font-semibold text-[#4f4134]">
         {{ t(props.language, "aiChefMessage") }}
         <textarea
           v-model="userMessage"
           rows="3"
-          class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          class="mt-1 w-full px-3 py-2 text-sm"
           :placeholder="t(props.language, 'aiChefMessagePlaceholder')"
         />
       </label>
 
-      <button
-        class="w-full rounded-md border border-sky-700 bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-        :disabled="sendingMessage"
-        @click="sendMessage"
-      >
-        {{ t(props.language, "sendToAiChef") }}
-      </button>
+      <div class="flex items-center justify-between gap-3">
+        <VoiceRecorderButton
+          :idle-label="t(props.language, 'startRecording')"
+          :recording-label="t(props.language, 'stopRecording')"
+          :disabled="sendingMessage"
+          @recording-start="handleRecordingStart"
+          @recording-stop="handleRecordingStop"
+          @recording-error="handleRecordingError"
+        />
 
-      <p v-if="aiChefStatus" class="text-sm text-sky-700">{{ aiChefStatus }}</p>
-      <p v-if="aiChefError" class="text-sm font-medium text-rose-700">{{ aiChefError }}</p>
-    </div>
-  </section>
+        <RoughButton
+          class="ml-auto px-3 py-2 text-sm font-medium"
+          :disabled="sendingMessage"
+          @click="sendMessage"
+        >
+          {{ t(props.language, "sendToAiChef") }}
+        </RoughButton>
+      </div>
+
+      <p v-if="recorderMessage" class="scribble-text text-[#1f5872]">{{ recorderMessage }}</p>
+      <p v-if="recorderErrorMessage" class="scribble-text font-medium text-[#8f2e2e]">{{ recorderErrorMessage }}</p>
+
+      <p v-if="aiChefStatus" class="scribble-text text-[#1f5872]">{{ aiChefStatus }}</p>
+      <p v-if="aiChefError" class="scribble-text font-medium text-[#8f2e2e]">{{ aiChefError }}</p>
+    </RoughPanel>
+  </RoughPanel>
 </template>
