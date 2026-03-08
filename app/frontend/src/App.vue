@@ -278,6 +278,36 @@ async function addParsedItemsByLocation(): Promise<void> {
   }
 }
 
+async function decreaseOverviewItem(householdId: string, itemId: string, currentQuantity: number): Promise<void> {
+  try {
+    if (currentQuantity <= 1) {
+      const deleteResponse = await fetch(`/api/households/${householdId}/items/${itemId}`, {
+        method: "DELETE"
+      });
+      if (!deleteResponse.ok) {
+        throw new Error(`Failed to remove item (${deleteResponse.status})`);
+      }
+    } else {
+      const patchResponse = await fetch(`/api/households/${householdId}/items/${itemId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          quantity: currentQuantity - 1
+        })
+      });
+      if (!patchResponse.ok) {
+        throw new Error(`Failed to update item quantity (${patchResponse.status})`);
+      }
+    }
+
+    await loadHouseholds();
+  } catch (error) {
+    householdsError.value = error instanceof Error ? error.message : "Failed to update item";
+  }
+}
+
 function updateSelectedHouseholdId(nextHouseholdId: string): void {
   selectedHouseholdId.value = nextHouseholdId;
 }
@@ -500,7 +530,12 @@ onUnmounted(() => {
       <p v-else-if="householdsError" class="text-sm font-medium text-rose-700">{{ householdsError }}</p>
 
       <template v-if="!loadingHouseholds && !householdsError">
-        <OverviewPage v-if="activePage === 'overview'" :households="households" :language="language" />
+        <OverviewPage
+          v-if="activePage === 'overview'"
+          :households="households"
+          :language="language"
+          :on-decrease-item="decreaseOverviewItem"
+        />
 
         <QuickAddPage
           v-else-if="activePage === 'quick-add'"

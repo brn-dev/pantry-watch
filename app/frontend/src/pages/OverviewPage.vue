@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { Household, PantryItem } from "@shared/models";
 import { t, type Language } from "../i18n";
+
+const processingItemIds = ref<Record<string, boolean>>({});
 
 const props = defineProps<{
   households: Household[];
   language: Language;
+  onDecreaseItem: (householdId: string, itemId: string, currentQuantity: number) => Promise<void>;
 }>();
 
 function parseDateOnly(value: string): Date {
@@ -74,6 +78,25 @@ function getExpirationClass(expirationDate: string | null): string {
   }
   return "border-emerald-200 bg-emerald-100 text-emerald-800";
 }
+
+async function handleDecreaseItem(householdId: string, itemId: string, currentQuantity: number): Promise<void> {
+  if (processingItemIds.value[itemId]) {
+    return;
+  }
+
+  processingItemIds.value = {
+    ...processingItemIds.value,
+    [itemId]: true
+  };
+
+  try {
+    await props.onDecreaseItem(householdId, itemId, currentQuantity);
+  } finally {
+    const nextState = { ...processingItemIds.value };
+    delete nextState[itemId];
+    processingItemIds.value = nextState;
+  }
+}
 </script>
 
 <template>
@@ -95,15 +118,30 @@ function getExpirationClass(expirationDate: string | null): string {
             <li
               v-for="item in sortItemsByExpirationDate(location.items)"
               :key="item.id"
-              class="flex flex-col items-start gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 sm:flex-row sm:items-center sm:justify-between"
+              class="flex items-start justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5"
             >
-              <span class="break-words">{{ item.quantity }} {{ item.unit }} {{ item.name }}</span>
-              <span
-                class="self-start rounded-full border px-2 py-0.5 text-xs font-medium sm:self-auto"
-                :class="getExpirationClass(item.expirationDate)"
-              >
-                {{ getExpirationLabel(item.expirationDate) }}
-              </span>
+              <div class="min-w-0">
+                <p class="break-words text-lg font-semibold">
+                  {{ item.name }}
+                  <span class="text-sm font-medium text-slate-500">({{ item.unit }})</span>
+                </p>
+                <span
+                  class="mt-1 inline-flex self-start rounded-full border px-2 py-0.5 text-xs font-medium sm:self-auto"
+                  :class="getExpirationClass(item.expirationDate)"
+                >
+                  {{ getExpirationLabel(item.expirationDate) }}
+                </span>
+              </div>
+              <div class="ml-auto flex items-center gap-2">
+                <span class="text-lg font-bold text-slate-700">{{ item.quantity }}</span>
+                <button
+                  class="rounded-md border border-slate-300 bg-slate-100 px-3 py-1 text-lg font-bold leading-none text-slate-800 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!!processingItemIds[item.id]"
+                  @click="handleDecreaseItem(household.id, item.id, item.quantity)"
+                >
+                  -
+                </button>
+              </div>
             </li>
           </ul>
           <p v-else class="text-sm text-slate-500">{{ t(props.language, "noItemsYet") }}</p>
