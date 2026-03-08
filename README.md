@@ -1,6 +1,6 @@
 # Pantry Watch
 
-AI-powered grocery tracker.
+AI-powered grocery best-before date tracker.
 
 ## App Flow
 
