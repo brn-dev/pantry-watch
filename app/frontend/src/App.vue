@@ -4,6 +4,7 @@ import type { Household, PantryLocation } from "@shared/models";
 import OverviewPage from "./pages/OverviewPage.vue";
 import QuickAddPage from "./pages/QuickAddPage.vue";
 import AiChefPage from "./pages/AiChefPage.vue";
+import ShoppingListPage from "./pages/ShoppingListPage.vue";
 import RoughButton from "./components/RoughButton.vue";
 import RoughPanel from "./components/RoughPanel.vue";
 import type { ParsedItem } from "./types/quickAdd";
@@ -19,6 +20,16 @@ type RecordingTextResponse = {
 
 type ParsedItemsResponse = {
   items: Omit<ParsedItem, "id">[];
+};
+
+type ErrorResponse = {
+  error?: string;
+};
+
+type RecordingResult = {
+  audioBlob: Blob;
+  mimeType: string;
+  durationMs: number;
 };
 
 type CreateOverviewItemInput = {
@@ -47,7 +58,10 @@ const selectedHousehold = computed<Household | undefined>(() => {
   return households.value.find((household) => household.id === selectedHouseholdId.value);
 });
 
-const activePage = computed<"overview" | "quick-add" | "ai-chef">(() => {
+const activePage = computed<"overview" | "quick-add" | "ai-chef" | "shopping-list">(() => {
+  if (routePath.value.startsWith("/shopping-list")) {
+    return "shopping-list";
+  }
   if (routePath.value.startsWith("/ai-chef")) {
     return "ai-chef";
   }
@@ -78,6 +92,19 @@ function mapParsedItemFromApi(parsedItemApi: Omit<ParsedItem, "id">): ParsedItem
   };
 }
 
+async function getApiErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+  try {
+    const data = (await response.json()) as ErrorResponse;
+    if (typeof data.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+
+  return fallbackMessage;
+}
+
 function translate(key: TranslationKey, params?: Record<string, string | number>): string {
   return t(language.value, key, params);
 }
@@ -91,7 +118,7 @@ function handlePopState(): void {
   routePath.value = window.location.pathname;
 }
 
-function navigateTo(path: "/overview" | "/quick-add" | "/ai-chef"): void {
+function navigateTo(path: "/overview" | "/quick-add" | "/ai-chef" | "/shopping-list"): void {
   if (window.location.pathname !== path) {
     window.history.pushState({}, "", path);
   }
@@ -106,7 +133,7 @@ function closeMobileSidebar(): void {
   isMobileSidebarOpen.value = false;
 }
 
-function navigateFromMobile(path: "/overview" | "/quick-add" | "/ai-chef"): void {
+function navigateFromMobile(path: "/overview" | "/quick-add" | "/ai-chef" | "/shopping-list"): void {
   navigateTo(path);
   closeMobileSidebar();
 }
@@ -142,25 +169,58 @@ async function loadHouseholds(): Promise<void> {
   }
 }
 
-async function loadVoiceRecordingText(): Promise<void> {
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Failed to read audio data."));
+        return;
+      }
+
+      const delimiterIndex = result.indexOf(",");
+      if (delimiterIndex < 0) {
+        reject(new Error("Audio data URL is invalid."));
+        return;
+      }
+
+      resolve(result.slice(delimiterIndex + 1));
+    };
+    reader.onerror = () => {
+      reject(new Error("Failed to read recorded audio."));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function transcribeVoiceRecording(recordingResult: RecordingResult): Promise<void> {
   quickAddError.value = "";
   quickAddStatus.value = translate("loadingRecordingText");
 
   try {
-    const response = await fetch("/api/voice/recording-text", {
+    const audioBase64 = await blobToBase64(recordingResult.audioBlob);
+    const response = await fetch("/api/ai/voice-to-text", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ householdId: selectedHouseholdId.value })
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: recordingResult.mimeType,
+        language: language.value
+      })
     });
 
     if (!response.ok) {
-      throw new Error(translate("failedLoadRecordingText", { status: response.status }));
+      throw new Error(
+        await getApiErrorMessage(response, translate("failedLoadRecordingText", { status: response.status }))
+      );
     }
 
     const data = (await response.json()) as RecordingTextResponse;
     voiceRecordingText.value = data.text;
+    inputText.value = data.text;
     quickAddStatus.value = translate("recordingTextLoaded");
   } catch (error) {
     quickAddStatus.value = "";
@@ -173,21 +233,32 @@ async function parseInputText(): Promise<void> {
     quickAddError.value = translate("enterTextFirst");
     return;
   }
+  if (!selectedHousehold.value) {
+    quickAddError.value = translate("householdNotFound");
+    return;
+  }
 
   quickAddError.value = "";
   quickAddStatus.value = translate("parsingText");
 
   try {
-    const response = await fetch("/api/voice/text-to-items", {
+    const availableLocations = selectedHousehold.value.locations.map((location) => location.name);
+    const currentDate = new Date().toISOString().slice(0, 10);
+
+    const response = await fetch("/api/ai/text-to-items", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ text: inputText.value })
+      body: JSON.stringify({
+        text: inputText.value,
+        availableLocations,
+        currentDate
+      })
     });
 
     if (!response.ok) {
-      throw new Error(translate("failedParseText", { status: response.status }));
+      throw new Error(await getApiErrorMessage(response, translate("failedParseText", { status: response.status })));
     }
 
     const data = (await response.json()) as ParsedItemsResponse;
@@ -472,6 +543,25 @@ function updateParsedItemExpirationDate(parsedItemId: string, value: string): vo
   });
 }
 
+function updateParsedItem(
+  parsedItemId: string,
+  input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+): void {
+  parsedItems.value = parsedItems.value.map((parsedItem) => {
+    if (parsedItem.id !== parsedItemId) {
+      return parsedItem;
+    }
+
+    return {
+      ...parsedItem,
+      name: input.name,
+      quantity: input.quantity,
+      unit: input.unit,
+      expirationDate: input.expirationDate
+    };
+  });
+}
+
 onMounted(() => {
   const storedLanguage = window.localStorage.getItem("pantry-watch-language");
   if (storedLanguage === "en" || storedLanguage === "de") {
@@ -525,6 +615,13 @@ onUnmounted(() => {
             @click="navigateTo('/ai-chef')"
           >
             {{ translate("aiChef") }}
+          </RoughButton>
+          <RoughButton
+            class="text-left text-sm"
+            :fill="activePage === 'shopping-list' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+            @click="navigateTo('/shopping-list')"
+          >
+            {{ translate("shoppingList") }}
           </RoughButton>
         </nav>
         <div class="ml-auto hidden items-center gap-1 md:flex">
@@ -606,6 +703,13 @@ onUnmounted(() => {
             >
               {{ translate("aiChef") }}
             </RoughButton>
+            <RoughButton
+              class="w-full text-left text-sm"
+              :fill="activePage === 'shopping-list' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+              @click="navigateFromMobile('/shopping-list')"
+            >
+              {{ translate("shoppingList") }}
+            </RoughButton>
           </nav>
 
           <div class="mt-6 flex items-center gap-2">
@@ -640,15 +744,18 @@ onUnmounted(() => {
               ? translate("overview")
               : activePage === "quick-add"
                 ? translate("quickAdd")
-                : translate("aiChef")
+                : activePage === "ai-chef"
+                  ? translate("aiChef")
+                  : translate("shoppingList")
           }}
         </h2>
       </RoughPanel>
 
-      <p v-if="loadingHouseholds" class="scribble-text">{{ translate("loadingHouseholds") }}</p>
-      <p v-else-if="householdsError" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
+      <p v-if="loadingHouseholds && !households.length" class="scribble-text">{{ translate("loadingHouseholds") }}</p>
+      <p v-if="householdsError && !households.length" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
+      <p v-if="householdsError && households.length" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
 
-      <template v-if="!loadingHouseholds && !householdsError">
+      <template v-if="households.length">
         <OverviewPage
           v-if="activePage === 'overview'"
           :households="households"
@@ -674,13 +781,15 @@ onUnmounted(() => {
           :quick-add-error="quickAddError"
           @household-change="updateSelectedHouseholdId"
           @parsed-item-expiration-date-change="updateParsedItemExpirationDate"
+          @parsed-item-update="updateParsedItem"
           @input-text-change="updateInputText"
-          @load-recording-text="loadVoiceRecordingText"
+          @load-recording-text="transcribeVoiceRecording"
           @parse-text="parseInputText"
           @add-items="addParsedItemsByLocation"
         />
 
-        <AiChefPage v-else :households="households" :language="language" />
+        <AiChefPage v-else-if="activePage === 'ai-chef'" :households="households" :language="language" />
+        <ShoppingListPage v-else :language="language" />
       </template>
     </section>
   </main>

@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { Household } from "@shared/models";
 import type { ParsedItem } from "../types/quickAdd";
 import { t, type Language } from "../i18n";
 import RoughButton from "../components/RoughButton.vue";
 import RoughPanel from "../components/RoughPanel.vue";
 import VoiceRecorderButton from "../components/VoiceRecorderButton.vue";
+import AddItemModal from "../components/AddItemModal.vue";
+
+type RecordingResult = {
+  audioBlob: Blob;
+  mimeType: string;
+  durationMs: number;
+};
 
 const props = defineProps<{
   households: Household[];
@@ -22,14 +29,42 @@ const props = defineProps<{
 const emit = defineEmits<{
   "household-change": [nextHouseholdId: string];
   "parsed-item-expiration-date-change": [parsedItemId: string, value: string];
+  "parsed-item-update": [
+    parsedItemId: string,
+    input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+  ];
   "input-text-change": [value: string];
-  "load-recording-text": [];
+  "load-recording-text": [recordingResult: RecordingResult];
   "parse-text": [];
   "add-items": [];
 }>();
 
 const recorderMessage = ref("");
 const recorderErrorMessage = ref("");
+const editParsedItemModal = ref<{
+  open: boolean;
+  parsedItemId: string;
+  initialItem: { name: string; quantity: number; unit: string; expirationDate: string | null } | null;
+}>({
+  open: false,
+  parsedItemId: "",
+  initialItem: null
+});
+
+watch(
+  () => props.voiceRecordingText,
+  (nextVoiceRecordingText, previousVoiceRecordingText) => {
+    if (
+      !nextVoiceRecordingText ||
+      nextVoiceRecordingText === previousVoiceRecordingText ||
+      nextVoiceRecordingText === props.inputText
+    ) {
+      return;
+    }
+
+    emit("input-text-change", nextVoiceRecordingText);
+  },
+);
 
 function onHouseholdChange(event: Event): void {
   const target = event.target as HTMLSelectElement;
@@ -46,15 +81,45 @@ function onParsedItemExpirationDateChange(parsedItemId: string, event: Event): v
   emit("parsed-item-expiration-date-change", parsedItemId, target.value);
 }
 
+function openEditParsedItemModal(parsedItem: ParsedItem): void {
+  editParsedItemModal.value = {
+    open: true,
+    parsedItemId: parsedItem.id,
+    initialItem: {
+      name: parsedItem.name,
+      quantity: parsedItem.quantity,
+      unit: parsedItem.unit,
+      expirationDate: parsedItem.expirationDate
+    }
+  };
+}
+
+function closeEditParsedItemModal(): void {
+  editParsedItemModal.value = {
+    open: false,
+    parsedItemId: "",
+    initialItem: null
+  };
+}
+
+function handleEditParsedItemSubmit(input: { name: string; quantity: number; unit: string; expirationDate: string | null }): void {
+  if (!editParsedItemModal.value.parsedItemId) {
+    return;
+  }
+
+  emit("parsed-item-update", editParsedItemModal.value.parsedItemId, input);
+  closeEditParsedItemModal();
+}
+
 function handleRecordingStart(): void {
   recorderErrorMessage.value = "";
   recorderMessage.value = t(props.language, "recordingStarted");
 }
 
-function handleRecordingStop(): void {
+function handleRecordingStop(recordingResult: RecordingResult): void {
   recorderErrorMessage.value = "";
-  recorderMessage.value = t(props.language, "recordingStopped");
-  emit("load-recording-text");
+  recorderMessage.value = "";
+  emit("load-recording-text", recordingResult);
 }
 
 function handleRecordingError(code: "not_supported" | "permission_denied" | "recording_failed"): void {
@@ -90,9 +155,6 @@ function handleRecordingError(code: "not_supported" | "permission_denied" | "rec
         </select>
       </label>
 
-      <p v-if="voiceRecordingText" class="rounded-md border border-[#7f6a55]/35 bg-[#fffaf0]/90 p-3 text-sm text-[#3e3227]">
-        {{ voiceRecordingText }}
-      </p>
     </div>
 
     <div class="min-w-0 space-y-3">
@@ -107,33 +169,26 @@ function handleRecordingError(code: "not_supported" | "permission_denied" | "rec
         />
       </label>
 
-      <VoiceRecorderButton
-        :idle-label="t(props.language, 'startRecording')"
-        :recording-label="t(props.language, 'stopRecording')"
-        :disabled="!selectedHouseholdId"
-        @recording-start="handleRecordingStart"
-        @recording-stop="handleRecordingStop"
-        @recording-error="handleRecordingError"
-      />
+      <div class="flex items-center justify-between gap-2">
+        <VoiceRecorderButton
+          :idle-label="t(props.language, 'startRecording')"
+          :recording-label="t(props.language, 'stopRecording')"
+          :disabled="!selectedHouseholdId"
+          @recording-start="handleRecordingStart"
+          @recording-stop="handleRecordingStop"
+          @recording-error="handleRecordingError"
+        />
 
-      <p v-if="recorderMessage" class="scribble-text text-[#1f5872]">{{ recorderMessage }}</p>
-      <p v-if="recorderErrorMessage" class="scribble-text font-medium text-[#8f2e2e]">{{ recorderErrorMessage }}</p>
-
-      <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <RoughButton
-          class="w-full px-3 py-2 text-sm font-medium sm:w-auto"
+          class="px-3 py-2 text-sm font-medium"
           @click="emit('parse-text')"
         >
           {{ t(props.language, "parseText") }}
         </RoughButton>
-        <RoughButton
-          class="w-full px-3 py-2 text-sm font-medium sm:w-auto"
-          @click="emit('add-items')"
-          :disabled="!hasParsedItems || !selectedHouseholdId"
-        >
-          {{ t(props.language, "addParsedItems") }}
-        </RoughButton>
       </div>
+
+      <p v-if="recorderMessage" class="scribble-text text-[#1f5872]">{{ recorderMessage }}</p>
+      <p v-if="recorderErrorMessage" class="scribble-text font-medium text-[#8f2e2e]">{{ recorderErrorMessage }}</p>
 
       <p v-if="quickAddStatus" class="scribble-text text-[#1f5872]">{{ quickAddStatus }}</p>
       <p v-if="quickAddError" class="scribble-text font-medium text-[#8f2e2e]">{{ quickAddError }}</p>
@@ -144,7 +199,16 @@ function handleRecordingError(code: "not_supported" | "permission_denied" | "rec
           :key="parsedItem.id"
           class="rounded-md border border-[#7f6a55]/35 bg-[#fffdf4] p-2"
         >
-          <p class="break-words">{{ parsedItem.locationName }}: {{ parsedItem.quantity }} {{ parsedItem.unit }} {{ parsedItem.name }}</p>
+          <div class="flex items-start justify-between gap-2">
+            <p class="break-words">{{ parsedItem.locationName }}: {{ parsedItem.quantity }} {{ parsedItem.unit }} {{ parsedItem.name }}</p>
+            <RoughButton
+              class="px-2 py-1 text-base leading-none"
+              :title="t(props.language, 'editItem')"
+              @click="openEditParsedItemModal(parsedItem)"
+            >
+              ✎
+            </RoughButton>
+          </div>
           <label class="mt-2 block text-xs font-semibold text-[#4f4134]">
             {{ t(props.language, "expirationDate") }}
             <input
@@ -156,6 +220,24 @@ function handleRecordingError(code: "not_supported" | "permission_denied" | "rec
           </label>
         </li>
       </ul>
+
+      <RoughButton
+        class="w-full px-3 py-2 text-sm font-medium sm:w-auto"
+        @click="emit('add-items')"
+        :disabled="!hasParsedItems || !selectedHouseholdId"
+      >
+        {{ t(props.language, "addParsedItems") }}
+      </RoughButton>
     </div>
   </RoughPanel>
+
+  <AddItemModal
+    :open="editParsedItemModal.open"
+    :language="props.language"
+    mode="edit"
+    :initial-item="editParsedItemModal.initialItem"
+    :submitting="false"
+    @close="closeEditParsedItemModal"
+    @submit="handleEditParsedItemSubmit"
+  />
 </template>

@@ -517,13 +517,11 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
               v-for="item in sortItemsByExpirationDate(location.items)"
               :key="item.id"
               class="flex items-start justify-between gap-2 rounded-lg border border-[#7c6854]/35 bg-[#fffaf0]/90 px-2 py-1.5"
+              :title="t(props.language, 'editItem')"
+              @dblclick="openEditItemModal(household.id, item)"
             >
               <div class="min-w-0">
-                <p
-                  class="break-words text-lg font-semibold"
-                  :title="t(props.language, 'editItem')"
-                  @dblclick="openEditItemModal(household.id, item)"
-                >
+                <p class="break-words text-lg font-semibold">
                   {{ item.name }}
                   <span class="text-sm font-medium text-[#65584a]">({{ item.unit }})</span>
                 </p>
@@ -543,6 +541,7 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
                 <RoughButton
                   class="px-3 py-1 text-lg font-bold leading-none"
                   :disabled="!!processingItemIds[item.id]"
+                  @dblclick.stop
                   @click="handleDecreaseItem(household.id, item.id, item.quantity)"
                 >
                   -
