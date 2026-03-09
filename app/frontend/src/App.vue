@@ -8,6 +8,7 @@ import ShoppingListPage from "./pages/ShoppingListPage.vue";
 import RoughButton from "./components/RoughButton.vue";
 import RoughPanel from "./components/RoughPanel.vue";
 import HandDrawnIcon from "./components/HandDrawnIcon.vue";
+import FlagIcon from "./components/FlagIcon.vue";
 import type { ParsedItem } from "./types/quickAdd";
 import { t, type Language, type TranslationKey } from "./i18n";
 
@@ -645,7 +646,7 @@ onUnmounted(() => {
             title="English"
             aria-label="English"
           >
-            🇬🇧
+            <FlagIcon language="en" />
           </RoughButton>
           <RoughButton
             class="px-2 py-1 text-sm leading-none"
@@ -654,7 +655,7 @@ onUnmounted(() => {
             title="Deutsch"
             aria-label="Deutsch"
           >
-            🇩🇪
+            <FlagIcon language="de" />
           </RoughButton>
         </div>
       </div>
@@ -745,7 +746,7 @@ onUnmounted(() => {
               title="English"
               aria-label="English"
             >
-              🇬🇧
+              <FlagIcon language="en" />
             </RoughButton>
             <RoughButton
               class="px-2 py-1 text-sm leading-none"
@@ -754,7 +755,7 @@ onUnmounted(() => {
               title="Deutsch"
               aria-label="Deutsch"
             >
-              🇩🇪
+              <FlagIcon language="de" />
             </RoughButton>
           </div>
         </aside>
@@ -834,4 +835,5 @@ onUnmounted(() => {
     </section>
   </main>
 </template>
+
 

@@ -469,10 +469,10 @@ async function copyActiveItemsToClipboard(): Promise<void> {
       </RoughPanel>
 
       <RoughPanel class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
           <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "doneShoppingItems") }}</h3>
           <RoughButton
-            class="px-3 py-2 text-sm font-medium"
+            class="px-3 pt-2 pb-3 text-sm font-medium"
             :disabled="!doneItems.length"
             :title="t(props.language, 'clearDoneItems')"
             :aria-label="t(props.language, 'clearDoneItems')"
