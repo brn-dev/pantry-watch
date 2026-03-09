@@ -7,6 +7,7 @@ import AiChefPage from "./pages/AiChefPage.vue";
 import ShoppingListPage from "./pages/ShoppingListPage.vue";
 import RoughButton from "./components/RoughButton.vue";
 import RoughPanel from "./components/RoughPanel.vue";
+import HandDrawnIcon from "./components/HandDrawnIcon.vue";
 import type { ParsedItem } from "./types/quickAdd";
 import { t, type Language, type TranslationKey } from "./i18n";
 
@@ -600,28 +601,40 @@ onUnmounted(() => {
             :fill="activePage === 'overview' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/overview')"
           >
-            {{ translate("overview") }}
+            <span class="inline-flex items-center gap-1">
+              <HandDrawnIcon name="notebook" />
+              <span>{{ translate("overview") }}</span>
+            </span>
           </RoughButton>
           <RoughButton
             class="text-left text-sm"
             :fill="activePage === 'quick-add' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/quick-add')"
           >
-            {{ translate("quickAdd") }}
+            <span class="inline-flex items-center gap-1">
+              <HandDrawnIcon name="microphone" />
+              <span>{{ translate("quickAdd") }}</span>
+            </span>
           </RoughButton>
           <RoughButton
             class="text-left text-sm"
             :fill="activePage === 'ai-chef' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/ai-chef')"
           >
-            {{ translate("aiChef") }}
+            <span class="inline-flex items-center gap-1">
+              <HandDrawnIcon name="chef-hat" />
+              <span>{{ translate("aiChef") }}</span>
+            </span>
           </RoughButton>
           <RoughButton
             class="text-left text-sm"
             :fill="activePage === 'shopping-list' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
             @click="navigateTo('/shopping-list')"
           >
-            {{ translate("shoppingList") }}
+            <span class="inline-flex items-center gap-1">
+              <HandDrawnIcon name="checkmark" />
+              <span>{{ translate("shoppingList") }}</span>
+            </span>
           </RoughButton>
         </nav>
         <div class="ml-auto hidden items-center gap-1 md:flex">
@@ -687,28 +700,40 @@ onUnmounted(() => {
               :fill="activePage === 'overview' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/overview')"
             >
-              {{ translate("overview") }}
+              <span class="inline-flex items-center gap-1">
+                <HandDrawnIcon name="notebook" />
+                <span>{{ translate("overview") }}</span>
+              </span>
             </RoughButton>
             <RoughButton
               class="w-full text-left text-sm"
               :fill="activePage === 'quick-add' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/quick-add')"
             >
-              {{ translate("quickAdd") }}
+              <span class="inline-flex items-center gap-1">
+                <HandDrawnIcon name="microphone" />
+                <span>{{ translate("quickAdd") }}</span>
+              </span>
             </RoughButton>
             <RoughButton
               class="w-full text-left text-sm"
               :fill="activePage === 'ai-chef' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/ai-chef')"
             >
-              {{ translate("aiChef") }}
+              <span class="inline-flex items-center gap-1">
+                <HandDrawnIcon name="chef-hat" />
+                <span>{{ translate("aiChef") }}</span>
+              </span>
             </RoughButton>
             <RoughButton
               class="w-full text-left text-sm"
               :fill="activePage === 'shopping-list' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
               @click="navigateFromMobile('/shopping-list')"
             >
-              {{ translate("shoppingList") }}
+              <span class="inline-flex items-center gap-1">
+                <HandDrawnIcon name="checkmark" />
+                <span>{{ translate("shoppingList") }}</span>
+              </span>
             </RoughButton>
           </nav>
 
@@ -738,16 +763,31 @@ onUnmounted(() => {
 
     <section class="mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6">
       <RoughPanel class="mb-4">
-        <h2 class="text-3xl font-semibold tracking-tight sm:text-4xl">
-          {{
-            activePage === "overview"
-              ? translate("overview")
-              : activePage === "quick-add"
-                ? translate("quickAdd")
-                : activePage === "ai-chef"
-                  ? translate("aiChef")
-                  : translate("shoppingList")
-          }}
+        <h2 class="inline-flex items-center gap-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+          <HandDrawnIcon
+            :name="
+              activePage === 'overview'
+                ? 'notebook'
+                : activePage === 'quick-add'
+                  ? 'microphone'
+                  : activePage === 'ai-chef'
+                    ? 'chef-hat'
+                    : 'checkmark'
+            "
+            :size="36"
+            :stroke-width="1.8"
+          />
+          <span>
+            {{
+              activePage === "overview"
+                ? translate("overview")
+                : activePage === "quick-add"
+                  ? translate("quickAdd")
+                  : activePage === "ai-chef"
+                    ? translate("aiChef")
+                    : translate("shoppingList")
+            }}
+          </span>
         </h2>
       </RoughPanel>
 

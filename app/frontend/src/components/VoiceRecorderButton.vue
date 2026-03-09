@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import RoughButton from "./RoughButton.vue";
+import HandDrawnIcon from "./HandDrawnIcon.vue";
 
 type RecordingResult = {
   audioBlob: Blob;
@@ -38,10 +39,6 @@ const recordingStartedAt = ref<number | null>(null);
 
 const buttonLabel = computed<string>(() => {
   return isRecording.value ? props.recordingLabel : props.idleLabel;
-});
-
-const icon = computed<string>(() => {
-  return isRecording.value ? "●" : "🎤";
 });
 
 const buttonFill = computed<string>(() => {
@@ -163,12 +160,16 @@ onUnmounted(() => {
 
 <template>
   <RoughButton
-    class="flex items-center gap-2 px-3 py-2 text-sm font-medium"
+    class="px-3 py-2 text-sm font-medium"
     :disabled="disabled"
     :fill="buttonFill"
     @click="toggleRecording"
   >
-    <span class="text-lg leading-none" :class="isRecording ? 'animate-pulse' : ''">{{ icon }}</span>
-    <span>{{ buttonLabel }}</span>
+    <span class="inline-flex items-center gap-2 whitespace-nowrap">
+      <span class="leading-none" :class="isRecording ? 'animate-pulse' : ''">
+        <HandDrawnIcon name="microphone" :size="18" />
+      </span>
+      <span>{{ buttonLabel }}</span>
+    </span>
   </RoughButton>
 </template>
