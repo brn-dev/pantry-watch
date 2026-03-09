@@ -11,7 +11,11 @@
     "dev:frontend": "npm run dev --workspace @pantry-watch/frontend",
     "dev:backend": "npm run dev --workspace @pantry-watch/backend",
     "build": "npm run build --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "cap:sync": "npm run cap:sync --workspace @pantry-watch/frontend",
+    "android:sync": "npm run android:sync --workspace @pantry-watch/frontend",
+    "android:open": "npm run android:open --workspace @pantry-watch/frontend",
+    "android:run": "npm run android:run --workspace @pantry-watch/frontend"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

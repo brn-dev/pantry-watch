@@ -38,7 +38,7 @@ const buildParsedItemsEnvelopeSchema = (availableLocations: string[]) => {
             locationName: locationNameSchema,
             name: z.string().min(1),
             quantity: z.number().min(0.000001),
-            unit: z.string().min(1),
+            unit: z.string().min(0),
             expirationDate: dateStringSchema.nullable()
           })
           .strict()
@@ -176,8 +176,8 @@ const parseItemsWithStructuredOutput = async (
               text:
                 `Extract pantry items from user text. Current date is ${currentDate}. ` +
                 "Use only one of the provided available locations for locationName. Never invent or alter location names. " +
-                "If location is missing, set the location to '-'. Abbreviate the quantity if possible, i.e. liter -> L. " +
-                "Use quantity=1 and unit='-' if omitted. expirationDate must be YYYY-MM-DD or null."
+                "If location is missing, set the location to '?'. Abbreviate the quantity if possible, i.e. liter -> L. " +
+                "Use quantity=1 and unit='' if omitted. expirationDate must be YYYY-MM-DD or null."
             }
           ]
         },
@@ -224,7 +224,7 @@ const ParsedShoppingListItemsEnvelopeSchema = z
         .object({
           name: z.string().min(1),
           quantity: z.number().min(0.000001),
-          unit: z.string().min(1),
+          unit: z.string().min(0),
           shop: z.string().min(1)
         })
         .strict()
@@ -263,7 +263,7 @@ const parseShoppingListItemsWithStructuredOutput = async (
               text:
                 `Extract shopping list items from natural language. Current date is ${currentDate}. ` +
                 "Each item must include name, quantity, unit, and shop. " +
-                "If quantity is missing, use 1. If unit is missing, use 'pcs'. If shop is missing, use '-'."
+                "If quantity is missing, use 1. If unit is missing, use ''. If shop is missing, use '?'."
             }
           ]
         },

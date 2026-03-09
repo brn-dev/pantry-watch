@@ -59,6 +59,8 @@ const shoppingParseError = ref("");
 const recorderMessage = ref("");
 const recorderErrorMessage = ref("");
 const addMode = ref<"quick" | "manual">("quick");
+const copyActiveItemsStatus = ref("");
+const copyActiveItemsError = ref("");
 
 const activeItems = computed<ShoppingListItem[]>(() => {
   return shoppingItems.value.filter((shoppingItem) => !shoppingItem.done);
@@ -108,8 +110,8 @@ function addShoppingItem(): void {
     {
       id: createShoppingItemId(),
       name: trimmedName,
-      amount: nextItemAmount.value.trim() || "1",
-      shop: nextItemShop.value.trim() || "-",
+      amount: nextItemAmount.value.trim(),
+      shop: nextItemShop.value.trim() || "?",
       done: false
     }
   ];
@@ -130,6 +132,10 @@ function setItemDone(itemId: string, done: boolean): void {
       done
     };
   });
+}
+
+function clearDoneItems(): void {
+  shoppingItems.value = shoppingItems.value.filter((shoppingItem) => !shoppingItem.done);
 }
 
 function mapParsedShoppingItemFromApi(item: Omit<ParsedShoppingListItem, "id">): ParsedShoppingListItem {
@@ -273,9 +279,9 @@ function addParsedShoppingItems(): void {
   }
 
   const nextItems = parsedShoppingItems.value.map((parsedItem) => {
-    const normalizedShop = parsedItem.shop.trim() || "-";
-    const normalizedUnit = parsedItem.unit.trim() || "pcs";
-    const amount = `${parsedItem.quantity} ${normalizedUnit}`;
+    const normalizedShop = parsedItem.shop.trim() || "?";
+    const normalizedUnit = parsedItem.unit.trim() || "";
+    const amount = `${parsedItem.quantity} ${normalizedUnit}`.trim();
 
     return {
       id: createShoppingItemId(),
@@ -291,6 +297,36 @@ function addParsedShoppingItems(): void {
   shoppingParseError.value = "";
   parsedShoppingItems.value = [];
   shoppingInputText.value = "";
+}
+
+function createCopyTextForActiveItems(): string {
+  return activeItemsByShop.value
+    .map((shopGroup) => {
+      const itemLines = shopGroup.items.map((shoppingItem) =>
+        shoppingItem.amount ? `- ${shoppingItem.name} (${shoppingItem.amount})` : `- ${shoppingItem.name}`
+      );
+      return `${shopGroup.shop}\n${itemLines.join("\n")}`;
+    })
+    .join("\n\n");
+}
+
+async function copyActiveItemsToClipboard(): Promise<void> {
+  if (!activeItems.value.length) {
+    copyActiveItemsStatus.value = "";
+    copyActiveItemsError.value = t(props.language, "noActiveItemsToCopy");
+    return;
+  }
+
+  copyActiveItemsStatus.value = "";
+  copyActiveItemsError.value = "";
+
+  try {
+    const textToCopy = createCopyTextForActiveItems();
+    await navigator.clipboard.writeText(textToCopy);
+    copyActiveItemsStatus.value = t(props.language, "activeItemsCopied");
+  } catch {
+    copyActiveItemsError.value = t(props.language, "activeItemsCopyFailed");
+  }
 }
 </script>
 
@@ -393,7 +429,20 @@ function addParsedShoppingItems(): void {
 
     <div class="grid gap-4 lg:grid-cols-2">
       <RoughPanel class="space-y-3">
-        <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "activeShoppingItems") }}</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "activeShoppingItems") }}</h3>
+          <RoughButton
+            class="px-3 py-2 text-sm font-medium"
+            :disabled="!activeItems.length"
+            :title="t(props.language, 'copyActiveItems')"
+            :aria-label="t(props.language, 'copyActiveItems')"
+            @click="copyActiveItemsToClipboard"
+          >
+            ⧉
+          </RoughButton>
+        </div>
+        <p v-if="copyActiveItemsStatus" class="scribble-text text-[#1f5872]">{{ copyActiveItemsStatus }}</p>
+        <p v-if="copyActiveItemsError" class="scribble-text font-medium text-[#8f2e2e]">{{ copyActiveItemsError }}</p>
         <div v-if="activeItemsByShop.length" class="space-y-3">
           <section
             v-for="shopGroup in activeItemsByShop"
@@ -409,7 +458,7 @@ function addParsedShoppingItems(): void {
               >
                 <div class="min-w-0 text-sm text-[#3a2f25]">
                   <p class="break-words font-semibold">{{ shoppingItem.name }}</p>
-                  <p class="text-xs text-[#5e5143]">{{ t(props.language, "amount") }}: {{ shoppingItem.amount }}</p>
+                  <p v-if="shoppingItem.amount" class="text-xs text-[#5e5143]">{{ t(props.language, "amount") }}: {{ shoppingItem.amount }}</p>
                 </div>
                 <RoughButton class="px-3 py-1 text-sm" @click="setItemDone(shoppingItem.id, true)">✓</RoughButton>
               </li>
@@ -420,7 +469,18 @@ function addParsedShoppingItems(): void {
       </RoughPanel>
 
       <RoughPanel class="space-y-3">
-        <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "doneShoppingItems") }}</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "doneShoppingItems") }}</h3>
+          <RoughButton
+            class="px-3 py-2 text-sm font-medium"
+            :disabled="!doneItems.length"
+            title="Clear done items"
+            aria-label="Clear done items"
+            @click="clearDoneItems"
+          >
+            🗑
+          </RoughButton>
+        </div>
         <ul v-if="doneItems.length" class="space-y-2">
           <li
             v-for="shoppingItem in doneItems"
@@ -429,7 +489,7 @@ function addParsedShoppingItems(): void {
           >
             <div class="min-w-0 text-sm text-[#3a2f25]">
               <p class="break-words font-semibold line-through decoration-[#7f6a55]/80">{{ shoppingItem.name }}</p>
-              <p class="text-xs text-[#5e5143]">{{ t(props.language, "amount") }}: {{ shoppingItem.amount }}</p>
+              <p v-if="shoppingItem.amount" class="text-xs text-[#5e5143]">{{ t(props.language, "amount") }}: {{ shoppingItem.amount }}</p>
               <p class="text-xs text-[#5e5143]">{{ t(props.language, "shop") }}: {{ shoppingItem.shop }}</p>
             </div>
             <RoughButton class="px-3 py-1 text-sm" @click="setItemDone(shoppingItem.id, false)">↺</RoughButton>
