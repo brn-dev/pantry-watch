@@ -4,6 +4,7 @@ import type { Household, PantryItem } from "@shared/models";
 import { t, type Language } from "../i18n";
 import RoughButton from "../components/RoughButton.vue";
 import RoughPanel from "../components/RoughPanel.vue";
+import HandDrawnIcon from "../components/HandDrawnIcon.vue";
 import AddItemModal from "../components/AddItemModal.vue";
 import AddLocationModal from "../components/AddLocationModal.vue";
 import EditExpirationModal from "../components/EditExpirationModal.vue";
@@ -517,8 +518,6 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
               v-for="item in sortItemsByExpirationDate(location.items)"
               :key="item.id"
               class="flex items-start justify-between gap-2 rounded-lg border border-[#7c6854]/35 bg-[#fffaf0]/90 px-2 py-1.5"
-              :title="t(props.language, 'editItem')"
-              @dblclick="openEditItemModal(household.id, item)"
             >
               <div class="min-w-0">
                 <p class="break-words text-lg font-semibold">
@@ -541,10 +540,17 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
                 <RoughButton
                   class="px-3 py-1 text-lg font-bold leading-none"
                   :disabled="!!processingItemIds[item.id]"
-                  @dblclick.stop
                   @click="handleDecreaseItem(household.id, item.id, item.quantity)"
                 >
                   -
+                </RoughButton>
+                <RoughButton
+                  class="h-8 w-9 p-0 text-lg font-bold leading-none"
+                  :disabled="!!processingItemIds[item.id]"
+                  :title="t(props.language, 'editItem')"
+                  @click="openEditItemModal(household.id, item)"
+                >
+                  <HandDrawnIcon name="pencil" :size="18" />
                 </RoughButton>
               </div>
             </li>
@@ -604,4 +610,3 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     @submit="handleEditExpirationSubmit"
   />
 </template>
-

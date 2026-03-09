@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const props = withDefaults(
   defineProps<{
-    name: "notebook" | "microphone" | "chef-hat" | "checkmark";
+    name: "notebook" | "microphone" | "chef-hat" | "checkmark" | "pencil";
     size?: number;
     strokeWidth?: number;
   }>(),
@@ -40,6 +40,13 @@ const props = withDefaults(
       <path d="M6.5 13.8H17.5V19.8H6.5V13.8Z" :stroke-width="props.strokeWidth" stroke="currentColor" />
       <path d="M6.5 13.8C5 13.8 3.8 12.6 3.8 11.1C3.8 9.6 5 8.4 6.5 8.4C6.9 6.4 8.7 5 10.8 5C12.2 5 13.5 5.6 14.4 6.7C14.9 6.4 15.5 6.2 16.1 6.2C17.9 6.2 19.3 7.6 19.3 9.4C20.5 9.8 21.3 10.9 21.3 12.1C21.3 13.2 20.4 13.8 19.4 13.8H6.5Z" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linejoin="round" />
       <path d="M9.5 16.8H14.5" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linecap="round" />
+    </template>
+
+    <template v-else-if="props.name === 'pencil'">
+      <path d="M5.3 18.6L6.6 14L15.3 5.3C16 4.6 17.2 4.6 17.9 5.3L18.7 6.1C19.4 6.8 19.4 8 18.7 8.7L10 17.4L5.3 18.6Z" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linejoin="round" />
+      <path d="M14 6.6L17.4 10" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linecap="round" />
+      <path d="M7.4 15.2L9.7 17.5" :stroke-width="Math.max(props.strokeWidth - 0.55, 1.05)" stroke="currentColor" stroke-linecap="round" />
+      <path d="M5.9 18L6.8 17.1" :stroke-width="Math.max(props.strokeWidth - 0.55, 1.05)" stroke="currentColor" stroke-linecap="round" />
     </template>
 
     <template v-else>

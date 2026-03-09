@@ -62,6 +62,19 @@ type ParsedShoppingListItem = {
   shop: string;
 };
 
+function normalizeTranscriptionText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[.,!?;:()[\]{}"']/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function isKnownSubtitleWatermark(text: string): boolean {
+  const normalizedText = normalizeTranscriptionText(text);
+  return normalizedText.startsWith("untertitel") || normalizedText.startsWith("subtitles");
+}
+
 const createTranscription = async (audioBase64: string, mimeType: string, language?: string): Promise<string> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -96,7 +109,7 @@ const createTranscription = async (audioBase64: string, mimeType: string, langua
 
   const data = (await response.json()) as { text?: string };
   const text = data.text?.trim() ?? "";
-  if (!text) {
+  if (!text || isKnownSubtitleWatermark(text)) {
     throw new Error("OpenAI transcription returned empty text.");
   }
 
@@ -175,6 +188,8 @@ const parseItemsWithStructuredOutput = async (
               type: "input_text",
               text:
                 `Extract pantry items from user text. Current date is ${currentDate}. ` +
+                "The input may come from voice transcription and can contain recognition errors. " +
+                "Infer and correct obvious transcription mistakes from context while preserving user intent. " +
                 "Use only one of the provided available locations for locationName. Never invent or alter location names. " +
                 "If location is missing, set the location to '?'. Abbreviate the quantity if possible, i.e. liter -> L. " +
                 "Use quantity=1 and unit='' if omitted. expirationDate must be YYYY-MM-DD or null."
@@ -262,6 +277,8 @@ const parseShoppingListItemsWithStructuredOutput = async (
               type: "input_text",
               text:
                 `Extract shopping list items from natural language. Current date is ${currentDate}. ` +
+                "The input may come from voice transcription and can contain recognition errors. " +
+                "Infer and correct obvious transcription mistakes from context while preserving user intent. " +
                 "Each item must include name, quantity, unit, and shop. " +
                 "If quantity is missing, use 1. If unit is missing, use ''. If shop is missing, use '?'."
             }

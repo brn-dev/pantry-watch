@@ -339,14 +339,14 @@ async function copyActiveItemsToClipboard(): Promise<void> {
           :fill="addMode === 'quick' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
           @click="addMode = 'quick'"
         >
-          Quick Add
+          {{ t(props.language, "quickAdd") }}
         </RoughButton>
         <RoughButton
           class="px-3 py-2 text-sm font-medium"
           :fill="addMode === 'manual' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
           @click="addMode = 'manual'"
         >
-          Manual Add
+          {{ t(props.language, "manualAdd") }}
         </RoughButton>
       </div>
 
@@ -474,8 +474,8 @@ async function copyActiveItemsToClipboard(): Promise<void> {
           <RoughButton
             class="px-3 py-2 text-sm font-medium"
             :disabled="!doneItems.length"
-            title="Clear done items"
-            aria-label="Clear done items"
+            :title="t(props.language, 'clearDoneItems')"
+            :aria-label="t(props.language, 'clearDoneItems')"
             @click="clearDoneItems"
           >
             🗑
