@@ -339,6 +339,28 @@ async function createOverviewLocation(householdId: string, locationName: string)
   }
 }
 
+async function updateOverviewLocation(householdId: string, locationId: string, locationName: string): Promise<void> {
+  householdsError.value = "";
+
+  try {
+    const response = await fetch(`/api/households/${householdId}/locations/${locationId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name: locationName.trim() })
+    });
+
+    if (!response.ok) {
+      throw new Error(translate("failedUpdateLocation", { name: locationName, status: response.status }));
+    }
+
+    await loadHouseholds();
+  } catch (error) {
+    householdsError.value = error instanceof Error ? error.message : translate("failedLoadHouseholdsGeneric");
+  }
+}
+
 async function createOverviewItem(
   householdId: string,
   locationId: string,
@@ -633,6 +655,7 @@ onUnmounted(() => {
           :language="language"
           :on-decrease-item="decreaseOverviewItem"
           :on-create-location="createOverviewLocation"
+          :on-update-location="updateOverviewLocation"
           :on-create-item="createOverviewItem"
           :on-update-item="updateOverviewItem"
           :on-update-item-expiration="updateOverviewItemExpiration"
@@ -662,3 +685,4 @@ onUnmounted(() => {
     </section>
   </main>
 </template>
+

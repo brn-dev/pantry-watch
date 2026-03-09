@@ -9,6 +9,8 @@ const props = defineProps<{
   language: Language;
   householdName: string;
   submitting: boolean;
+  mode?: "create" | "edit";
+  initialLocationName?: string;
 }>();
 
 const emit = defineEmits<{
@@ -19,6 +21,10 @@ const emit = defineEmits<{
 const locationName = ref("");
 
 const modalTitle = computed<string>(() => {
+  if (props.mode === "edit") {
+    return `${t(props.language, "editLocation")} - ${props.householdName}`;
+  }
+
   return `${t(props.language, "addLocation")} - ${props.householdName}`;
 });
 
@@ -42,7 +48,7 @@ watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
-      locationName.value = "";
+      locationName.value = props.mode === "edit" ? props.initialLocationName?.trim() ?? "" : "";
     }
   }
 );
@@ -56,7 +62,7 @@ watch(
 
       <form class="space-y-3" @submit.prevent="handleSubmit">
         <label class="block text-base font-semibold text-[#4f4134]">
-          {{ t(props.language, "addLocationPrompt") }}
+          {{ props.mode === "edit" ? t(props.language, "editLocationPrompt") : t(props.language, "addLocationPrompt") }}
           <input v-model="locationName" class="mt-1 w-full px-3 py-2 text-sm" autofocus />
         </label>
 
@@ -65,7 +71,7 @@ watch(
             {{ t(props.language, "cancel") }}
           </RoughButton>
           <RoughButton type="submit" class="px-3 py-2 text-sm" :disabled="submitting || !locationName.trim()">
-            {{ t(props.language, "addLocation") }}
+            {{ props.mode === "edit" ? t(props.language, "save") : t(props.language, "addLocation") }}
           </RoughButton>
         </div>
       </form>

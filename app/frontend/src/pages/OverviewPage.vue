@@ -48,6 +48,19 @@ const addLocationModal = ref<{
   householdId: "",
   householdName: ""
 });
+const editLocationModal = ref<{
+  open: boolean;
+  householdId: string;
+  householdName: string;
+  locationId: string;
+  initialLocationName: string;
+}>({
+  open: false,
+  householdId: "",
+  householdName: "",
+  locationId: "",
+  initialLocationName: ""
+});
 const editExpirationModal = ref<{
   open: boolean;
   householdId: string;
@@ -67,6 +80,7 @@ const props = defineProps<{
   language: Language;
   onDecreaseItem: (householdId: string, itemId: string, currentQuantity: number) => Promise<void>;
   onCreateLocation: (householdId: string, locationName: string) => Promise<void>;
+  onUpdateLocation: (householdId: string, locationId: string, locationName: string) => Promise<void>;
   onCreateItem: (
     householdId: string,
     locationId: string,
@@ -221,6 +235,62 @@ async function handleAddLocationSubmit(locationName: string): Promise<void> {
     const nextState = { ...processingHouseholdIds.value };
     delete nextState[householdId];
     processingHouseholdIds.value = nextState;
+  }
+}
+
+function openEditLocationModal(householdId: string, locationId: string): void {
+  if (processingLocationIds.value[locationId]) {
+    return;
+  }
+
+  const household = props.households.find((candidate) => candidate.id === householdId);
+  const location = household?.locations.find((candidate) => candidate.id === locationId);
+  if (!household || !location) {
+    return;
+  }
+
+  editLocationModal.value = {
+    open: true,
+    householdId,
+    householdName: household.name,
+    locationId,
+    initialLocationName: location.name
+  };
+}
+
+function closeEditLocationModal(): void {
+  if (processingLocationIds.value[editLocationModal.value.locationId]) {
+    return;
+  }
+
+  editLocationModal.value = {
+    open: false,
+    householdId: "",
+    householdName: "",
+    locationId: "",
+    initialLocationName: ""
+  };
+}
+
+async function handleEditLocationSubmit(locationName: string): Promise<void> {
+  const householdId = editLocationModal.value.householdId;
+  const locationId = editLocationModal.value.locationId;
+  if (!householdId || !locationId || processingLocationIds.value[locationId]) {
+    return;
+  }
+
+  processingLocationIds.value = {
+    ...processingLocationIds.value,
+    [locationId]: true
+  };
+
+  try {
+    await props.onUpdateLocation(householdId, locationId, locationName.trim());
+    closeEditLocationModal();
+  } finally {
+    const nextState = { ...processingLocationIds.value };
+    delete nextState[locationId];
+    processingLocationIds.value = nextState;
   }
 }
 
@@ -417,7 +487,13 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
       <div v-if="household.locations.length" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <RoughPanel v-for="location in household.locations" :key="location.id" class="p-1" fill="rgba(255, 251, 241, 0.78)">
           <div class="mb-2 flex items-start justify-between gap-2">
-            <h4 class="text-2xl font-semibold text-[#3c3127]">{{ location.name }}</h4>
+            <h4
+              class="text-2xl font-semibold text-[#3c3127]"
+              :title="t(props.language, 'editLocation')"
+              @dblclick="openEditLocationModal(household.id, location.id)"
+            >
+              {{ location.name }}
+            </h4>
             <div class="ml-auto flex items-center gap-1">
               <RoughButton
                 class="px-2 py-1 text-xl leading-none"
@@ -509,6 +585,16 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     @submit="handleAddLocationSubmit"
   />
 
+  <AddLocationModal
+    :open="editLocationModal.open"
+    :language="language"
+    mode="edit"
+    :household-name="editLocationModal.householdName"
+    :initial-location-name="editLocationModal.initialLocationName"
+    :submitting="!!processingLocationIds[editLocationModal.locationId]"
+    @close="closeEditLocationModal"
+    @submit="handleEditLocationSubmit"
+  />
   <EditExpirationModal
     :open="editExpirationModal.open"
     :language="language"
@@ -519,3 +605,4 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     @submit="handleEditExpirationSubmit"
   />
 </template>
+
