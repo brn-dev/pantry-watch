@@ -3,6 +3,7 @@ export type Language = "en" | "de";
 const messages = {
   en: {
     appTitle: "Pantry Watch",
+    settings: "Settings",
     language: "Language",
     english: "English",
     german: "German",
@@ -110,6 +111,7 @@ const messages = {
   },
   de: {
     appTitle: "Pantry Watch",
+    settings: "Einstellungen",
     language: "Sprache",
     english: "Englisch",
     german: "Deutsch",

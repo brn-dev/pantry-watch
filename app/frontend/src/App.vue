@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { Household, PantryLocation } from "@shared/models";
 import OverviewPage from "./pages/OverviewPage.vue";
 import QuickAddPage from "./pages/QuickAddPage.vue";
@@ -52,9 +52,8 @@ const inputText = ref("");
 const parsedItems = ref<ParsedItem[]>([]);
 const quickAddStatus = ref("");
 const quickAddError = ref("");
-const isMobileSidebarOpen = ref(false);
-
 const selectedHouseholdId = ref("");
+const isSettingsModalOpen = ref(false);
 
 const selectedHousehold = computed<Household | undefined>(() => {
   return households.value.find((household) => household.id === selectedHouseholdId.value);
@@ -114,6 +113,21 @@ function translate(key: TranslationKey, params?: Record<string, string | number>
 function updateLanguage(nextLanguage: Language): void {
   language.value = nextLanguage;
   window.localStorage.setItem("pantry-watch-language", nextLanguage);
+  isSettingsModalOpen.value = false;
+}
+
+function openSettingsModal(): void {
+  isSettingsModalOpen.value = true;
+}
+
+function closeSettingsModal(): void {
+  isSettingsModalOpen.value = false;
+}
+
+function handleGlobalKeyDown(event: KeyboardEvent): void {
+  if (event.key === "Escape" && isSettingsModalOpen.value) {
+    closeSettingsModal();
+  }
 }
 
 function handlePopState(): void {
@@ -125,19 +139,6 @@ function navigateTo(path: "/overview" | "/quick-add" | "/ai-chef" | "/shopping-l
     window.history.pushState({}, "", path);
   }
   routePath.value = path;
-}
-
-function toggleMobileSidebar(): void {
-  isMobileSidebarOpen.value = !isMobileSidebarOpen.value;
-}
-
-function closeMobileSidebar(): void {
-  isMobileSidebarOpen.value = false;
-}
-
-function navigateFromMobile(path: "/overview" | "/quick-add" | "/ai-chef" | "/shopping-list"): void {
-  navigateTo(path);
-  closeMobileSidebar();
 }
 
 function syncSelectionsToState(): void {
@@ -564,6 +565,10 @@ function updateParsedItem(
   });
 }
 
+watch(isSettingsModalOpen, (isOpen) => {
+  document.body.style.overflow = isOpen ? "hidden" : "";
+});
+
 onMounted(() => {
   const storedLanguage = window.localStorage.getItem("pantry-watch-language");
   if (storedLanguage === "en" || storedLanguage === "de") {
@@ -576,26 +581,26 @@ onMounted(() => {
   }
 
   window.addEventListener("popstate", handlePopState);
+  window.addEventListener("keydown", handleGlobalKeyDown);
   void loadHouseholds();
 });
 
 onUnmounted(() => {
   window.removeEventListener("popstate", handlePopState);
+  window.removeEventListener("keydown", handleGlobalKeyDown);
+  document.body.style.overflow = "";
 });
 </script>
 
 <template>
   <main class="min-h-screen w-full max-w-full overflow-x-hidden text-[var(--ink-main)]">
-    <header class="sticky top-0 z-30 border-b border-[#6f5a47]/40 bg-[#f8efda]/94 px-4 py-3 shadow-sm backdrop-blur">
+    <header class="fixed inset-x-0 top-0 z-30 border-b border-[#6f5a47]/40 bg-[#f8efda]/94 px-3 py-2 shadow-sm backdrop-blur md:sticky md:px-4 md:py-3">
       <div class="mx-auto flex w-full min-w-0 max-w-7xl items-center gap-2">
-        <RoughButton
-          class="md:hidden"
-          @click="toggleMobileSidebar"
-          aria-label="Toggle navigation"
-        >
-          ☰
-        </RoughButton>
-        <h1 class="min-w-0 truncate text-3xl font-bold tracking-tight text-[#3e3023] sm:text-4xl">{{ translate("appTitle") }}</h1>
+        <h1 class="inline-flex min-w-0 items-center gap-1 truncate text-2xl font-bold tracking-tight text-[#3e3023] sm:gap-2 sm:text-4xl">
+          <HandDrawnIcon name="clipboard" :size="32" :stroke-width="2" class="sm:hidden" />
+          <HandDrawnIcon name="clipboard" :size="44" :stroke-width="2" class="hidden sm:block" />
+          <span class="truncate">{{ translate("appTitle") }}</span>
+        </h1>
         <nav class="ml-4 hidden gap-2 md:flex">
           <RoughButton
             class="text-left text-sm"
@@ -603,7 +608,7 @@ onUnmounted(() => {
             @click="navigateTo('/overview')"
           >
             <span class="inline-flex items-center gap-1">
-              <HandDrawnIcon name="notebook" />
+              <HandDrawnIcon name="notebook" :size="20" />
               <span>{{ translate("overview") }}</span>
             </span>
           </RoughButton>
@@ -613,7 +618,7 @@ onUnmounted(() => {
             @click="navigateTo('/quick-add')"
           >
             <span class="inline-flex items-center gap-1">
-              <HandDrawnIcon name="microphone" />
+              <HandDrawnIcon name="microphone" :size="20" />
               <span>{{ translate("quickAdd") }}</span>
             </span>
           </RoughButton>
@@ -623,7 +628,7 @@ onUnmounted(() => {
             @click="navigateTo('/ai-chef')"
           >
             <span class="inline-flex items-center gap-1">
-              <HandDrawnIcon name="chef-hat" />
+              <HandDrawnIcon name="chef-hat" :size="20" />
               <span>{{ translate("aiChef") }}</span>
             </span>
           </RoughButton>
@@ -633,207 +638,286 @@ onUnmounted(() => {
             @click="navigateTo('/shopping-list')"
           >
             <span class="inline-flex items-center gap-1">
-              <HandDrawnIcon name="checkmark" />
+              <HandDrawnIcon name="checkmark" :size="20" />
               <span>{{ translate("shoppingList") }}</span>
             </span>
           </RoughButton>
         </nav>
-        <div class="ml-auto hidden items-center gap-1 md:flex">
+        <div class="ml-auto flex items-center gap-1">
           <RoughButton
-            class="px-2 py-1 text-sm leading-none"
-            :fill="language === 'en' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-            @click="updateLanguage('en')"
-            title="English"
-            aria-label="English"
+            class="px-1.5 py-0.5 text-xs leading-none sm:px-2 sm:py-1 sm:text-sm"
+            :fill="'rgba(255, 251, 238, 0.95)'"
+            @click="openSettingsModal"
+            :title="translate('settings')"
+            :aria-label="translate('settings')"
           >
-            <FlagIcon language="en" />
-          </RoughButton>
-          <RoughButton
-            class="px-2 py-1 text-sm leading-none"
-            :fill="language === 'de' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-            @click="updateLanguage('de')"
-            title="Deutsch"
-            aria-label="Deutsch"
-          >
-            <FlagIcon language="de" />
+            <HandDrawnIcon name="cog" :size="20" />
           </RoughButton>
         </div>
       </div>
     </header>
 
-    <div class="fixed inset-0 z-40 md:hidden pointer-events-none">
-      <Transition
-        enter-active-class="transition-opacity duration-200 ease-out"
-        enter-from-class="opacity-0"
-        enter-to-class="opacity-100"
-        leave-active-class="transition-opacity duration-150 ease-in"
-        leave-from-class="opacity-100"
-        leave-to-class="opacity-0"
+    <div
+      v-if="isSettingsModalOpen"
+      class="fixed inset-0 z-50 flex items-start justify-center bg-[#3e3023]/35 p-3 pt-20 sm:items-center sm:p-6"
+      @click.self="closeSettingsModal"
+    >
+      <RoughPanel
+        as="section"
+        class="w-full max-w-sm p-4 sm:p-5"
+        fill="rgba(255, 252, 240, 0.98)"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="translate('settings')"
       >
-        <button
-          v-if="isMobileSidebarOpen"
-          class="pointer-events-auto absolute inset-0 bg-slate-950/45"
-          @click="closeMobileSidebar"
-          aria-label="Close navigation"
-        />
-      </Transition>
-
-      <Transition
-        enter-active-class="transition-transform duration-250 ease-out"
-        enter-from-class="-translate-x-full"
-        enter-to-class="translate-x-0"
-        leave-active-class="transition-transform duration-200 ease-in"
-        leave-from-class="translate-x-0"
-        leave-to-class="-translate-x-full"
-      >
-        <aside
-          v-if="isMobileSidebarOpen"
-          class="pointer-events-auto absolute left-0 top-0 h-full w-72 border-r border-[#6f5a47]/50 bg-[#f6ecd5] p-4 shadow-2xl"
-        >
-          <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-3xl font-bold">{{ translate("appTitle") }}</h2>
-            <RoughButton class="px-2 py-1 text-sm" @click="closeMobileSidebar">✕</RoughButton>
-          </div>
-
-          <nav class="space-y-2">
-            <RoughButton
-              class="w-full text-left text-sm"
-              :fill="activePage === 'overview' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-              @click="navigateFromMobile('/overview')"
-            >
-              <span class="inline-flex items-center gap-1">
-                <HandDrawnIcon name="notebook" />
-                <span>{{ translate("overview") }}</span>
-              </span>
-            </RoughButton>
-            <RoughButton
-              class="w-full text-left text-sm"
-              :fill="activePage === 'quick-add' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-              @click="navigateFromMobile('/quick-add')"
-            >
-              <span class="inline-flex items-center gap-1">
-                <HandDrawnIcon name="microphone" />
-                <span>{{ translate("quickAdd") }}</span>
-              </span>
-            </RoughButton>
-            <RoughButton
-              class="w-full text-left text-sm"
-              :fill="activePage === 'ai-chef' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-              @click="navigateFromMobile('/ai-chef')"
-            >
-              <span class="inline-flex items-center gap-1">
-                <HandDrawnIcon name="chef-hat" />
-                <span>{{ translate("aiChef") }}</span>
-              </span>
-            </RoughButton>
-            <RoughButton
-              class="w-full text-left text-sm"
-              :fill="activePage === 'shopping-list' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-              @click="navigateFromMobile('/shopping-list')"
-            >
-              <span class="inline-flex items-center gap-1">
-                <HandDrawnIcon name="checkmark" />
-                <span>{{ translate("shoppingList") }}</span>
-              </span>
-            </RoughButton>
-          </nav>
-
-          <div class="mt-6 flex items-center gap-2">
-            <RoughButton
-              class="px-2 py-1 text-sm leading-none"
-              :fill="language === 'en' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-              @click="updateLanguage('en')"
-              title="English"
-              aria-label="English"
-            >
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h3 class="text-xl font-semibold tracking-tight text-[#3e3023]">
+            {{ translate("settings") }}
+          </h3>
+          <RoughButton class="px-2 py-1 text-sm leading-none" @click="closeSettingsModal">
+            {{ translate("cancel") }}
+          </RoughButton>
+        </div>
+        <p class="mb-2 text-sm font-semibold text-[#4f4134]">
+          {{ translate("language") }}
+        </p>
+        <div class="flex gap-2">
+          <RoughButton
+            class="min-w-[7.5rem] px-2 py-1 text-sm"
+            :fill="language === 'en' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+            @click="updateLanguage('en')"
+            :aria-label="translate('english')"
+          >
+            <span class="inline-flex items-center gap-2">
               <FlagIcon language="en" />
-            </RoughButton>
-            <RoughButton
-              class="px-2 py-1 text-sm leading-none"
-              :fill="language === 'de' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
-              @click="updateLanguage('de')"
-              title="Deutsch"
-              aria-label="Deutsch"
-            >
+              <span>{{ translate("english") }}</span>
+            </span>
+          </RoughButton>
+          <RoughButton
+            class="min-w-[7.5rem] px-2 py-1 text-sm"
+            :fill="language === 'de' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+            @click="updateLanguage('de')"
+            :aria-label="translate('german')"
+          >
+            <span class="inline-flex items-center gap-2">
               <FlagIcon language="de" />
-            </RoughButton>
+              <span>{{ translate("german") }}</span>
+            </span>
+          </RoughButton>
+        </div>
+      </RoughPanel>
+    </div>
+
+    <div class="page-transition-stage">
+      <Transition name="page-rip">
+        <section :key="activePage" class="page-transition-layer">
+          <div class="mx-auto w-full max-w-7xl p-3 pb-24 pt-20 sm:p-4 sm:pb-24 md:p-6 md:pb-6 md:pt-6">
+            <RoughPanel class="mb-4">
+              <h2 class="inline-flex items-center gap-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+                <HandDrawnIcon
+                  :name="
+                    activePage === 'overview'
+                      ? 'notebook'
+                      : activePage === 'quick-add'
+                        ? 'microphone'
+                        : activePage === 'ai-chef'
+                          ? 'chef-hat'
+                          : 'checkmark'
+                  "
+                  :size="36"
+                  :stroke-width="1.8"
+                />
+                <span>
+                  {{
+                    activePage === "overview"
+                      ? translate("overview")
+                      : activePage === "quick-add"
+                        ? translate("quickAdd")
+                        : activePage === "ai-chef"
+                          ? translate("aiChef")
+                          : translate("shoppingList")
+                  }}
+                </span>
+              </h2>
+            </RoughPanel>
+
+            <p v-if="loadingHouseholds && !households.length" class="scribble-text">{{ translate("loadingHouseholds") }}</p>
+            <p v-if="householdsError && !households.length" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
+            <p v-if="householdsError && households.length" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
+
+            <template v-if="households.length">
+              <OverviewPage
+                v-if="activePage === 'overview'"
+                :households="households"
+                :language="language"
+                :on-decrease-item="decreaseOverviewItem"
+                :on-create-location="createOverviewLocation"
+                :on-update-location="updateOverviewLocation"
+                :on-create-item="createOverviewItem"
+                :on-update-item="updateOverviewItem"
+                :on-update-item-expiration="updateOverviewItemExpiration"
+              />
+
+              <QuickAddPage
+                v-else-if="activePage === 'quick-add'"
+                :households="households"
+                :selected-household-id="selectedHouseholdId"
+                :language="language"
+                :voice-recording-text="voiceRecordingText"
+                :input-text="inputText"
+                :parsed-items="parsedItems"
+                :has-parsed-items="hasParsedItems"
+                :quick-add-status="quickAddStatus"
+                :quick-add-error="quickAddError"
+                @household-change="updateSelectedHouseholdId"
+                @parsed-item-expiration-date-change="updateParsedItemExpirationDate"
+                @parsed-item-update="updateParsedItem"
+                @input-text-change="updateInputText"
+                @load-recording-text="transcribeVoiceRecording"
+                @parse-text="parseInputText"
+                @add-items="addParsedItemsByLocation"
+              />
+
+              <AiChefPage v-else-if="activePage === 'ai-chef'" :households="households" :language="language" />
+              <ShoppingListPage v-else :language="language" />
+            </template>
           </div>
-        </aside>
+        </section>
       </Transition>
     </div>
 
-    <section class="mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6">
-      <RoughPanel class="mb-4">
-        <h2 class="inline-flex items-center gap-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-          <HandDrawnIcon
-            :name="
-              activePage === 'overview'
-                ? 'notebook'
-                : activePage === 'quick-add'
-                  ? 'microphone'
-                  : activePage === 'ai-chef'
-                    ? 'chef-hat'
-                    : 'checkmark'
-            "
-            :size="36"
-            :stroke-width="1.8"
-          />
-          <span>
-            {{
-              activePage === "overview"
-                ? translate("overview")
-                : activePage === "quick-add"
-                  ? translate("quickAdd")
-                  : activePage === "ai-chef"
-                    ? translate("aiChef")
-                    : translate("shoppingList")
-            }}
+    <nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-[#6f5a47]/40 bg-[#f8efda]/95 px-2 py-0.5 shadow-[0_-4px_12px_rgba(62,48,35,0.15)] backdrop-blur md:hidden">
+      <div class="mx-auto grid w-full max-w-7xl grid-cols-4 gap-1">
+        <RoughButton
+          class="h-10 w-full px-0 py-0"
+          :fill="activePage === 'overview' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+          @click="navigateTo('/overview')"
+          :aria-label="translate('overview')"
+        >
+          <span class="inline-flex h-10 items-center justify-center">
+            <HandDrawnIcon name="notebook" :size="24" />
           </span>
-        </h2>
-      </RoughPanel>
-
-      <p v-if="loadingHouseholds && !households.length" class="scribble-text">{{ translate("loadingHouseholds") }}</p>
-      <p v-if="householdsError && !households.length" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
-      <p v-if="householdsError && households.length" class="scribble-text text-[#8f2e2e]">{{ householdsError }}</p>
-
-      <template v-if="households.length">
-        <OverviewPage
-          v-if="activePage === 'overview'"
-          :households="households"
-          :language="language"
-          :on-decrease-item="decreaseOverviewItem"
-          :on-create-location="createOverviewLocation"
-          :on-update-location="updateOverviewLocation"
-          :on-create-item="createOverviewItem"
-          :on-update-item="updateOverviewItem"
-          :on-update-item-expiration="updateOverviewItemExpiration"
-        />
-
-        <QuickAddPage
-          v-else-if="activePage === 'quick-add'"
-          :households="households"
-          :selected-household-id="selectedHouseholdId"
-          :language="language"
-          :voice-recording-text="voiceRecordingText"
-          :input-text="inputText"
-          :parsed-items="parsedItems"
-          :has-parsed-items="hasParsedItems"
-          :quick-add-status="quickAddStatus"
-          :quick-add-error="quickAddError"
-          @household-change="updateSelectedHouseholdId"
-          @parsed-item-expiration-date-change="updateParsedItemExpirationDate"
-          @parsed-item-update="updateParsedItem"
-          @input-text-change="updateInputText"
-          @load-recording-text="transcribeVoiceRecording"
-          @parse-text="parseInputText"
-          @add-items="addParsedItemsByLocation"
-        />
-
-        <AiChefPage v-else-if="activePage === 'ai-chef'" :households="households" :language="language" />
-        <ShoppingListPage v-else :language="language" />
-      </template>
-    </section>
+        </RoughButton>
+        <RoughButton
+          class="h-10 w-full px-0 py-0"
+          :fill="activePage === 'quick-add' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+          @click="navigateTo('/quick-add')"
+          :aria-label="translate('quickAdd')"
+        >
+          <span class="inline-flex h-10 items-center justify-center">
+            <HandDrawnIcon name="microphone" :size="24" />
+          </span>
+        </RoughButton>
+        <RoughButton
+          class="h-10 w-full px-0 py-0"
+          :fill="activePage === 'ai-chef' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+          @click="navigateTo('/ai-chef')"
+          :aria-label="translate('aiChef')"
+        >
+          <span class="inline-flex h-10 items-center justify-center">
+            <HandDrawnIcon name="chef-hat" :size="24" />
+          </span>
+        </RoughButton>
+        <RoughButton
+          class="h-10 w-full px-0 py-0"
+          :fill="activePage === 'shopping-list' ? 'rgba(229, 199, 138, 0.95)' : 'rgba(255, 251, 238, 0.95)'"
+          @click="navigateTo('/shopping-list')"
+          :aria-label="translate('shoppingList')"
+        >
+          <span class="inline-flex h-10 items-center justify-center">
+            <HandDrawnIcon name="checkmark" :size="24" />
+          </span>
+        </RoughButton>
+      </div>
+    </nav>
   </main>
 </template>
+
+<style scoped>
+.page-transition-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: calc(100vh - 8.5rem);
+}
+
+.page-transition-layer {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 8.5rem);
+  background-color: var(--paper-base);
+  background-image:
+    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.7) 0, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(to right, transparent 0 3.8rem, var(--line-red) 3.8rem 4.05rem, transparent 4.05rem 100%),
+    repeating-linear-gradient(to bottom, transparent 0 2.05rem, var(--line-blue) 2.05rem 2.14rem, transparent 2.14rem 4.22rem),
+    linear-gradient(180deg, var(--paper-base) 0%, var(--paper-shadow) 100%);
+}
+
+.page-rip-enter-active,
+.page-rip-leave-active {
+  transition:
+    transform 800ms cubic-bezier(0.2, 0.85, 0.25, 1),
+    opacity 800ms ease,
+    filter 800ms ease;
+}
+
+.page-rip-leave-active {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow:
+    -10px 0 18px rgba(61, 49, 37, 0.2),
+    0 4px 24px rgba(61, 49, 37, 0.18);
+  will-change: transform, opacity, filter;
+}
+
+.page-rip-leave-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3rem;
+  width: 3.35rem;
+  background-image:
+    repeating-linear-gradient(to bottom, transparent 0 1.2rem, rgba(90, 135, 168, 0.24) 1.2rem 1.28rem, transparent 1.28rem 2.56rem),
+    linear-gradient(180deg, #fff6e7 0%, #f6e8cb 100%);
+  clip-path: polygon(
+    100% 0%,
+    42% 3%,
+    88% 9%,
+    30% 15%,
+    85% 23%,
+    36% 31%,
+    90% 40%,
+    34% 49%,
+    87% 58%,
+    30% 68%,
+    82% 78%,
+    26% 88%,
+    75% 96%,
+    100% 100%
+  );
+  filter: drop-shadow(-3px 0 3px rgba(48, 37, 26, 0.22));
+}
+
+.page-rip-leave-from {
+  transform: translateX(0) rotate(0deg);
+  opacity: 1;
+  filter: brightness(1);
+}
+
+.page-rip-leave-to {
+  transform: translateX(110%) rotate(2.2deg);
+  opacity: 0.96;
+  filter: brightness(0.96);
+}
+
+@media (max-width: 767px) {
+  .page-transition-stage,
+  .page-transition-layer {
+    min-height: calc(100vh - 12rem);
+  }
+}
+</style>
 
 
