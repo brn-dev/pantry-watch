@@ -17,6 +17,20 @@ type AiChefResponse = {
   reply: string;
 };
 
+type RecordingResult = {
+  audioBlob: Blob;
+  mimeType: string;
+  durationMs: number;
+};
+
+type RecordingTextResponse = {
+  text: string;
+};
+
+type ErrorResponse = {
+  error?: string;
+};
+
 type HouseholdItem = {
   householdId: string;
   householdName: string;
@@ -202,14 +216,43 @@ function handleRecordingStart(): void {
   recorderMessage.value = t(props.language, "recordingStarted");
 }
 
-function handleRecordingStop(): void {
+async function handleRecordingStop(recordingResult: RecordingResult): Promise<void> {
   recorderErrorMessage.value = "";
-  recorderMessage.value = t(props.language, "recordingStopped");
+  recorderMessage.value = "";
+  aiChefError.value = "";
+  aiChefStatus.value = t(props.language, "loadingRecordingText");
 
-  const placeholderText = t(props.language, "voiceTextPlaceholder");
-  userMessage.value = userMessage.value.trim()
-    ? `${userMessage.value.trim()}\n${placeholderText}`
-    : placeholderText;
+  try {
+    const audioBase64 = await blobToBase64(recordingResult.audioBlob);
+    const response = await fetch("/api/ai/voice-to-text", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: recordingResult.mimeType,
+        language: props.language
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await getApiErrorMessage(response, t(props.language, "failedLoadRecordingText", { status: response.status })));
+    }
+
+    const data = (await response.json()) as RecordingTextResponse;
+    const trimmedText = data.text.trim();
+    if (trimmedText) {
+      userMessage.value = userMessage.value.trim()
+        ? `${userMessage.value.trim()}\n${trimmedText}`
+        : trimmedText;
+    }
+
+    aiChefStatus.value = t(props.language, "recordingTextLoaded");
+  } catch (error) {
+    aiChefStatus.value = "";
+    aiChefError.value = error instanceof Error ? error.message : t(props.language, "failedLoadRecordingTextGeneric");
+  }
 }
 
 function handleRecordingError(code: "not_supported" | "permission_denied" | "recording_failed"): void {
@@ -226,6 +269,44 @@ function handleRecordingError(code: "not_supported" | "permission_denied" | "rec
   }
 
   recorderErrorMessage.value = t(props.language, "recordingFailed");
+}
+
+async function getApiErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+  try {
+    const data = (await response.json()) as ErrorResponse;
+    if (typeof data.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+
+  return fallbackMessage;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Failed to read audio data."));
+        return;
+      }
+
+      const delimiterIndex = result.indexOf(",");
+      if (delimiterIndex < 0) {
+        reject(new Error("Audio data URL is invalid."));
+        return;
+      }
+
+      resolve(result.slice(delimiterIndex + 1));
+    };
+    reader.onerror = () => {
+      reject(new Error("Failed to read recorded audio."));
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function sendMessage(): Promise<void> {
