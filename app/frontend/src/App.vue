@@ -837,33 +837,41 @@ onUnmounted(() => {
 .page-transition-stage {
   position: relative;
   overflow: hidden;
-  min-height: calc(100vh - 8.5rem);
+  min-height: calc(100vh - 5rem);
+  --notebook-line-start: 2.05rem;
+  --notebook-line-end: 2.14rem;
+  --notebook-line-repeat: 4.22rem;
 }
 
 .page-transition-layer {
   position: relative;
   z-index: 1;
-  min-height: calc(100vh - 8.5rem);
+  min-height: calc(100vh - 5rem);
   background-color: var(--paper-base);
   background-image:
     radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.7) 0, rgba(255, 255, 255, 0) 42%),
     linear-gradient(to right, transparent 0 3.8rem, var(--line-red) 3.8rem 4.05rem, transparent 4.05rem 100%),
-    repeating-linear-gradient(to bottom, transparent 0 2.05rem, var(--line-blue) 2.05rem 2.14rem, transparent 2.14rem 4.22rem),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 var(--notebook-line-start),
+      var(--line-blue) var(--notebook-line-start) var(--notebook-line-end),
+      transparent var(--notebook-line-end) var(--notebook-line-repeat)
+    ),
     linear-gradient(180deg, var(--paper-base) 0%, var(--paper-shadow) 100%);
 }
 
 .page-rip-enter-active,
 .page-rip-leave-active {
   transition:
-    transform 800ms cubic-bezier(0.2, 0.85, 0.25, 1),
-    opacity 800ms ease,
-    filter 800ms ease;
+    transform 1500ms cubic-bezier(0.2, 0.85, 0.25, 1),
+    opacity 1500ms ease,
+    filter 1500ms ease;
 }
 
 .page-rip-leave-active {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 40;
   pointer-events: none;
   box-shadow:
     -10px 0 18px rgba(61, 49, 37, 0.2),
@@ -876,25 +884,39 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -3rem;
-  width: 3.35rem;
+  left: -2rem;
+  width: 2.15rem;
   background-image:
-    repeating-linear-gradient(to bottom, transparent 0 1.2rem, rgba(90, 135, 168, 0.24) 1.2rem 1.28rem, transparent 1.28rem 2.56rem),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 var(--notebook-line-start),
+      var(--line-blue) var(--notebook-line-start) var(--notebook-line-end),
+      transparent var(--notebook-line-end) var(--notebook-line-repeat)
+    ),
     linear-gradient(180deg, #fff6e7 0%, #f6e8cb 100%);
   clip-path: polygon(
     100% 0%,
-    42% 3%,
-    88% 9%,
-    30% 15%,
-    85% 23%,
-    36% 31%,
-    90% 40%,
-    34% 49%,
-    87% 58%,
-    30% 68%,
-    82% 78%,
-    26% 88%,
-    75% 96%,
+    34% 1%,
+    82% 4%,
+    26% 7%,
+    90% 11%,
+    31% 14%,
+    87% 19%,
+    24% 23%,
+    92% 29%,
+    35% 33%,
+    80% 38%,
+    28% 46%,
+    94% 51%,
+    33% 54%,
+    86% 63%,
+    22% 69%,
+    91% 71%,
+    37% 78%,
+    76% 83%,
+    25% 91%,
+    88% 94%,
+    31% 97%,
     100% 100%
   );
   filter: drop-shadow(-3px 0 3px rgba(48, 37, 26, 0.22));
@@ -915,7 +937,19 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   .page-transition-stage,
   .page-transition-layer {
-    min-height: calc(100vh - 12rem);
+    min-height: calc(100vh - 1rem);
+  }
+
+  .page-rip-enter-active,
+  .page-rip-leave-active {
+    transition:
+      transform 800ms cubic-bezier(0.2, 0.85, 0.25, 1),
+      opacity 800ms ease,
+      filter 800ms ease;
+  }
+
+  .page-rip-leave-active {
+    clip-path: inset(5rem 0 0 -3.5rem);
   }
 }
 </style>
