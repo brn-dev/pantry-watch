@@ -392,7 +392,8 @@ async function copyActiveItemsToClipboard(): Promise<void> {
         </ul>
 
         <RoughButton
-          class="w-full px-3 py-2 text-sm font-medium sm:w-auto"
+          class="w-full px-3 text-sm font-medium sm:w-auto"
+          style="margin-top: 0.5rem"
           :disabled="!parsedShoppingItems.length"
           @click="addParsedShoppingItems"
         >

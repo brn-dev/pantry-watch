@@ -13,8 +13,13 @@ type ChatMessage = {
   content: string;
 };
 
-type AiChefResponse = {
-  reply: string;
+type ChatSelectedItemPayload = {
+  name: string;
+  quantity: number;
+  unit: string;
+  locationName: string;
+  householdName: string;
+  expirationDate: string | null;
 };
 
 type RecordingResult = {
@@ -29,6 +34,15 @@ type RecordingTextResponse = {
 
 type ErrorResponse = {
   error?: string;
+};
+
+type AiChefStreamRequest = {
+  selectedItems: ChatSelectedItemPayload[];
+  extraIngredients: string;
+  context: string;
+  language: Language;
+  message: string;
+  history: ChatMessage[];
 };
 
 type HouseholdItem = {
@@ -309,6 +323,109 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function parseSseEvent(block: string): { event: string; data: string } | null {
+  const lines = block.split(/\r?\n/u);
+  let eventName = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      eventName = line.slice(6).trim() || "message";
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trim());
+    }
+  }
+
+  if (!dataLines.length) {
+    return null;
+  }
+
+  return {
+    event: eventName,
+    data: dataLines.join("\n")
+  };
+}
+
+async function streamAiChefReply(payload: AiChefStreamRequest, onDelta: (delta: string) => void): Promise<string> {
+  const response = await fetch("/api/ai/chat/stream", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(await getApiErrorMessage(response, t(props.language, "aiChefRequestFailed", { status: response.status })));
+  }
+
+  if (!response.body) {
+    throw new Error(t(props.language, "aiChefRequestFailedGeneric"));
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let rawBuffer = "";
+  let accumulatedReply = "";
+  let doneReply = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    rawBuffer += decoder.decode(value, { stream: true });
+    const blocks = rawBuffer.split("\n\n");
+    rawBuffer = blocks.pop() ?? "";
+
+    for (const block of blocks) {
+      const parsedEvent = parseSseEvent(block);
+      if (!parsedEvent) {
+        continue;
+      }
+
+      let parsedData: unknown;
+      try {
+        parsedData = JSON.parse(parsedEvent.data);
+      } catch {
+        continue;
+      }
+
+      if (parsedEvent.event === "token") {
+        const delta = (parsedData as { delta?: unknown }).delta;
+        if (typeof delta === "string" && delta.length > 0) {
+          accumulatedReply += delta;
+          onDelta(delta);
+        }
+        continue;
+      }
+
+      if (parsedEvent.event === "done") {
+        const reply = (parsedData as { reply?: unknown }).reply;
+        if (typeof reply === "string") {
+          doneReply = reply;
+        }
+        continue;
+      }
+
+      if (parsedEvent.event === "error") {
+        const errorMessage = (parsedData as { error?: unknown }).error;
+        throw new Error(typeof errorMessage === "string" && errorMessage.trim() ? errorMessage : t(props.language, "aiChefRequestFailedGeneric"));
+      }
+    }
+  }
+
+  if (doneReply && !accumulatedReply) {
+    return doneReply;
+  }
+
+  return accumulatedReply;
+}
+
 async function sendMessage(): Promise<void> {
   const prompt = userMessage.value.trim();
   if (!prompt) {
@@ -325,34 +442,48 @@ async function sendMessage(): Promise<void> {
   aiChefStatus.value = t(props.language, "aiChefThinking");
   sendingMessage.value = true;
 
-  const nextHistory: ChatMessage[] = [...chatMessages.value, { role: "user", content: prompt }];
-  chatMessages.value = nextHistory;
+  const previousHistory: ChatMessage[] = [...chatMessages.value];
+  const nextHistory: ChatMessage[] = [...previousHistory, { role: "user", content: prompt }];
+  const selectedIdSet = new Set(selectedItemIds.value);
+  const selectedItemsPayload: ChatSelectedItemPayload[] = householdItems.value
+    .filter((item) => selectedIdSet.has(item.id))
+    .map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      locationName: item.locationName,
+      householdName: item.householdName,
+      expirationDate: item.expirationDate
+    }));
+
+  chatMessages.value = [...nextHistory, { role: "assistant", content: "" }];
   userMessage.value = "";
 
   try {
-    const response = await fetch("/api/ai-chef/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        householdIds: selectedHouseholdIds.value,
-        selectedItemIds: selectedItemIds.value,
+    let currentAssistantReply = "";
+    const finalReply = await streamAiChefReply(
+      {
+        selectedItems: selectedItemsPayload,
         extraIngredients: extraIngredients.value,
         context: additionalContext.value,
+        language: props.language,
         message: prompt,
-        history: nextHistory
-      })
-    });
+        history: previousHistory
+      },
+      (delta) => {
+        currentAssistantReply += delta;
+        chatMessages.value = [...nextHistory, { role: "assistant", content: currentAssistantReply }];
+      }
+    );
 
-    if (!response.ok) {
-      throw new Error(t(props.language, "aiChefRequestFailed", { status: response.status }));
+    if (!currentAssistantReply && finalReply) {
+      currentAssistantReply = finalReply;
     }
 
-    const data = (await response.json()) as AiChefResponse;
-    chatMessages.value = [...chatMessages.value, { role: "assistant", content: data.reply }];
+    chatMessages.value = [...nextHistory, { role: "assistant", content: currentAssistantReply }];
     aiChefStatus.value = "";
   } catch (error) {
+    chatMessages.value = nextHistory;
     aiChefStatus.value = "";
     aiChefError.value = error instanceof Error ? error.message : t(props.language, "aiChefRequestFailedGeneric");
   } finally {
@@ -408,7 +539,7 @@ async function sendMessage(): Promise<void> {
             <span class="text-xs">{{ itemsSectionOpen ? "▲" : "▼" }}</span>
           </RoughButton>
 
-          <div v-if="itemsSectionOpen" class="max-h-56 space-y-2 overflow-auto border-t border-[#7f6a55]/25 p-2 sm:max-h-64">
+          <div v-if="itemsSectionOpen" class="mobile-scrollbar max-h-56 space-y-2 overflow-auto border-t border-[#7f6a55]/25 p-2 sm:max-h-64">
             <label
               v-for="item in householdItems"
               :key="item.id"
@@ -460,7 +591,9 @@ async function sendMessage(): Promise<void> {
     <RoughPanel class="space-y-3" fill="rgba(255, 250, 239, 0.78)">
       <h3 class="text-2xl font-semibold text-[#3f3225]">{{ t(props.language, "aiChefChat") }}</h3>
 
-      <div class="max-h-64 space-y-2 overflow-auto sm:max-h-80">
+      <div
+        class="mobile-scrollbar max-h-64 space-y-2 overflow-y-auto overflow-x-hidden rounded-md border border-[#7f6a55]/35 bg-[#fffdf4]/80 p-2 sm:max-h-80"
+      >
         <div
           v-for="(message, index) in chatMessages"
           :key="index"

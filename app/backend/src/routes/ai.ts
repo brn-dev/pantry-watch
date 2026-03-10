@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod/v3";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
@@ -17,6 +17,31 @@ type ParseTextBody = {
 type ParseShoppingListTextBody = {
   text?: string;
   currentDate?: string;
+};
+
+type ChatRole = "user" | "assistant";
+
+type ChatMessage = {
+  role: ChatRole;
+  content: string;
+};
+
+type ChatSelectedItem = {
+  name?: string;
+  quantity?: number;
+  unit?: string;
+  locationName?: string;
+  householdName?: string;
+  expirationDate?: string | null;
+};
+
+type AiChatBody = {
+  message?: string;
+  history?: ChatMessage[];
+  selectedItems?: ChatSelectedItem[];
+  extraIngredients?: string;
+  context?: string;
+  language?: string;
 };
 
 const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
@@ -190,6 +215,7 @@ const parseItemsWithStructuredOutput = async (
                 `Extract pantry items from user text. Current date is ${currentDate}. ` +
                 "The input may come from voice transcription and can contain recognition errors. " +
                 "Infer and correct obvious transcription mistakes from context while preserving user intent. " +
+                "When users mention dates, assume day-month ordering (dd-mm) unless a different format is explicit. " +
                 "Use only one of the provided available locations for locationName. Never invent or alter location names. " +
                 "If location is missing, set the location to '?'. Abbreviate the quantity if possible, i.e. liter -> L. " +
                 "Use quantity=1 and unit='' if omitted. expirationDate must be YYYY-MM-DD or null."
@@ -311,6 +337,181 @@ const parseShoppingListItemsWithStructuredOutput = async (
   return ParsedShoppingListItemsEnvelopeSchema.parse(parsedJson).items;
 };
 
+const sanitizeChatHistory = (history: unknown): ChatMessage[] => {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .flatMap((entry) => {
+      if (typeof entry !== "object" || entry === null) {
+        return [];
+      }
+
+      const role = (entry as { role?: unknown }).role;
+      const content = (entry as { content?: unknown }).content;
+      if ((role !== "user" && role !== "assistant") || typeof content !== "string") {
+        return [];
+      }
+
+      const trimmedContent = content.trim();
+      if (!trimmedContent) {
+        return [];
+      }
+
+      return [{ role: role as ChatRole, content: trimmedContent }];
+    })
+    .slice(-20);
+};
+
+const sanitizeSelectedItems = (selectedItems: unknown): Required<Pick<ChatSelectedItem, "name" | "quantity" | "unit" | "locationName" | "householdName"> & { expirationDate: string | null }>[] => {
+  if (!Array.isArray(selectedItems)) {
+    return [];
+  }
+
+  return selectedItems
+    .flatMap((item) => {
+      if (typeof item !== "object" || item === null) {
+        return [];
+      }
+
+      const candidate = item as ChatSelectedItem;
+      const name = candidate.name?.trim() ?? "";
+      if (!name) {
+        return [];
+      }
+
+      const quantity = Number(candidate.quantity);
+      const normalizedQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+      const unit = candidate.unit?.trim() ?? "";
+      const locationName = candidate.locationName?.trim() ?? "?";
+      const householdName = candidate.householdName?.trim() ?? "?";
+      const expirationDate =
+        typeof candidate.expirationDate === "string" && dateStringSchema.safeParse(candidate.expirationDate).success
+          ? candidate.expirationDate
+          : null;
+
+      return [
+        {
+          name,
+          quantity: normalizedQuantity,
+          unit,
+          locationName,
+          householdName,
+          expirationDate
+        }
+      ];
+    })
+    .slice(0, 200);
+};
+
+const buildAiChefInput = (
+  message: string,
+  history: ChatMessage[],
+  selectedItems: ReturnType<typeof sanitizeSelectedItems>,
+  extraIngredients: string,
+  context: string,
+  language?: string
+): {
+  role: "system" | "user" | "assistant";
+  content: { type: "input_text"; text: string }[];
+}[] => {
+  const pantrySummary = selectedItems.length
+    ? selectedItems
+      .map((item) => {
+        const unitPart = item.unit ? ` ${item.unit}` : "";
+        const expirationPart = item.expirationDate ? `, expires ${item.expirationDate}` : "";
+        return `- ${item.quantity}${unitPart} ${item.name} (${item.householdName}/${item.locationName}${expirationPart})`;
+      })
+      .join("\n")
+    : "- no selected pantry items";
+
+  const systemPrompt =
+    "You are AI Chef for a pantry app. " +
+    "Give practical cooking suggestions based on available pantry items and user context. " +
+    "If ingredients are missing, explicitly list short substitutes or a minimal shopping list. " +
+    "Prefer concise, actionable responses with sections: Best idea, Why it fits, Steps, Optional upgrades.";
+
+  const userPrompt = [
+    `Preferred language: ${language?.trim() || "en"}`,
+    "Selected pantry items:",
+    pantrySummary,
+    `Extra ingredients: ${extraIngredients || "(none)"}`,
+    `Additional context: ${context || "(none)"}`,
+    `Latest user message: ${message}`
+  ].join("\n");
+
+  return [
+    {
+      role: "system",
+      content: [{ type: "input_text", text: systemPrompt }]
+    },
+    ...history.map((entry) => ({
+      role: entry.role,
+      content: [{ type: "input_text" as const, text: entry.content }]
+    })),
+    {
+      role: "user",
+      content: [{ type: "input_text", text: userPrompt }]
+    }
+  ];
+};
+
+const writeSseEvent = (res: Response, eventName: string, payload: unknown): void => {
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
+
+const parseSseBlocks = (buffer: string): { blocks: string[]; rest: string } => {
+  const normalizedBuffer = buffer.replace(/\r\n/gu, "\n");
+  const blocks = normalizedBuffer.split("\n\n");
+  const rest = blocks.pop() ?? "";
+  return { blocks, rest };
+};
+
+const extractSseData = (block: string): string => {
+  return block
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .join("\n");
+};
+
+const createAiChefReply = async (
+  message: string,
+  history: ChatMessage[],
+  selectedItems: ReturnType<typeof sanitizeSelectedItems>,
+  extraIngredients: string,
+  context: string,
+  language?: string
+): Promise<string> => {
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  if (!openAiApiKey) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+  const input = buildAiChefInput(message, history, selectedItems, extraIngredients, context, language);
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openAiApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "gpt-5-mini",
+      input
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI chat failed (${response.status}): ${errorText}`);
+  }
+
+  const responseData = (await response.json()) as unknown;
+  return extractResponseOutputText(responseData);
+};
+
 export const aiRouter = Router();
 
 aiRouter.post("/voice-to-text", async (req, res) => {
@@ -380,5 +581,154 @@ aiRouter.post("/shopping-list/text-to-items", async (req, res) => {
     res.json({ items });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Shopping list parsing failed." });
+  }
+});
+
+aiRouter.post("/chat", async (req, res) => {
+  const body = req.body as AiChatBody;
+  const message = body.message?.trim();
+  const history = sanitizeChatHistory(body.history);
+  const selectedItems = sanitizeSelectedItems(body.selectedItems);
+  const extraIngredients = body.extraIngredients?.trim() ?? "";
+  const context = body.context?.trim() ?? "";
+  const language = body.language?.trim();
+
+  if (!message) {
+    res.status(400).json({ error: "Message is required." });
+    return;
+  }
+
+  try {
+    const reply = await createAiChefReply(message, history, selectedItems, extraIngredients, context, language);
+    res.json({ reply });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "AI chat failed." });
+  }
+});
+
+aiRouter.post("/chat/stream", async (req, res) => {
+  const body = req.body as AiChatBody;
+  const message = body.message?.trim();
+  const history = sanitizeChatHistory(body.history);
+  const selectedItems = sanitizeSelectedItems(body.selectedItems);
+  const extraIngredients = body.extraIngredients?.trim() ?? "";
+  const context = body.context?.trim() ?? "";
+  const language = body.language?.trim();
+
+  if (!message) {
+    res.status(400).json({ error: "Message is required." });
+    return;
+  }
+
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  if (!openAiApiKey) {
+    res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const input = buildAiChefInput(message, history, selectedItems, extraIngredients, context, language);
+  const abortController = new AbortController();
+  res.on("close", () => {
+    if (!res.writableEnded) {
+      abortController.abort();
+    }
+  });
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openAiApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-5-mini",
+        input,
+        stream: true
+      }),
+      signal: abortController.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI chat failed (${response.status}): ${errorText}`);
+    }
+
+    if (!response.body) {
+      throw new Error("OpenAI returned an empty stream.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullReply = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = parseSseBlocks(buffer);
+      buffer = parsed.rest;
+
+      for (const block of parsed.blocks) {
+        const rawData = extractSseData(block);
+        if (!rawData || rawData === "[DONE]") {
+          continue;
+        }
+
+        let eventPayload: unknown;
+        try {
+          eventPayload = JSON.parse(rawData);
+        } catch {
+          continue;
+        }
+
+        if (typeof eventPayload !== "object" || eventPayload === null) {
+          continue;
+        }
+
+        const type = (eventPayload as { type?: unknown }).type;
+        if (type === "response.output_text.delta") {
+          const delta = (eventPayload as { delta?: unknown }).delta;
+          if (typeof delta === "string" && delta.length > 0) {
+            fullReply += delta;
+            writeSseEvent(res, "token", { delta });
+          }
+          continue;
+        }
+
+        if (type === "response.output_text.done") {
+          const text = (eventPayload as { text?: unknown }).text;
+          if (typeof text === "string" && !fullReply) {
+            fullReply = text;
+          }
+          continue;
+        }
+
+        if (type === "error") {
+          const messageText = (eventPayload as { message?: unknown }).message;
+          throw new Error(typeof messageText === "string" && messageText.trim() ? messageText : "OpenAI stream error.");
+        }
+      }
+    }
+
+    writeSseEvent(res, "done", { reply: fullReply });
+  } catch (error) {
+    const isAbortError =
+      (error instanceof Error && error.name === "AbortError") ||
+      (typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError");
+    if (!isAbortError) {
+      writeSseEvent(res, "error", { error: error instanceof Error ? error.message : "AI chat stream failed." });
+    }
+  } finally {
+    res.end();
   }
 });

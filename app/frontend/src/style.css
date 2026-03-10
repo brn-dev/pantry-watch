@@ -112,3 +112,26 @@ textarea:focus {
   color: var(--ink-muted);
   font-size: 1.02rem;
 }
+
+.mobile-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79, 66, 53, 0.45) transparent;
+}
+
+.mobile-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mobile-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mobile-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(79, 66, 53, 0.4);
+  border-radius: 999px;
+}
+
+.mobile-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 66, 53, 0.55);
+}
