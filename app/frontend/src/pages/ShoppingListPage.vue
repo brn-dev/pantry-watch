@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { t, type Language } from "../i18n";
 import RoughButton from "../components/RoughButton.vue";
 import RoughPanel from "../components/RoughPanel.vue";
+import HandDrawnIcon from "../components/HandDrawnIcon.vue";
 import VoiceRecorderButton from "../components/VoiceRecorderButton.vue";
 
 type ShoppingListItem = {
@@ -61,6 +62,11 @@ const recorderErrorMessage = ref("");
 const addMode = ref<"quick" | "manual">("quick");
 const copyActiveItemsStatus = ref("");
 const copyActiveItemsError = ref("");
+const editModalOpen = ref(false);
+const editingItemId = ref<string | null>(null);
+const editItemName = ref("");
+const editItemAmount = ref("");
+const editItemShop = ref("");
 
 const activeItems = computed<ShoppingListItem[]>(() => {
   return shoppingItems.value.filter((shoppingItem) => !shoppingItem.done);
@@ -136,6 +142,10 @@ function setItemDone(itemId: string, done: boolean): void {
 
 function clearDoneItems(): void {
   shoppingItems.value = shoppingItems.value.filter((shoppingItem) => !shoppingItem.done);
+}
+
+function removeShoppingItem(itemId: string): void {
+  shoppingItems.value = shoppingItems.value.filter((shoppingItem) => shoppingItem.id !== itemId);
 }
 
 function mapParsedShoppingItemFromApi(item: Omit<ParsedShoppingListItem, "id">): ParsedShoppingListItem {
@@ -328,6 +338,52 @@ async function copyActiveItemsToClipboard(): Promise<void> {
     copyActiveItemsError.value = t(props.language, "activeItemsCopyFailed");
   }
 }
+
+function openEditModal(shoppingItem: ShoppingListItem): void {
+  editingItemId.value = shoppingItem.id;
+  editItemName.value = shoppingItem.name;
+  editItemAmount.value = shoppingItem.amount;
+  editItemShop.value = shoppingItem.shop;
+  editModalOpen.value = true;
+}
+
+function closeEditModal(): void {
+  editModalOpen.value = false;
+  editingItemId.value = null;
+  editItemName.value = "";
+  editItemAmount.value = "";
+  editItemShop.value = "";
+}
+
+function saveEditedShoppingItem(): void {
+  const itemId = editingItemId.value;
+  if (!itemId) {
+    return;
+  }
+
+  const name = editItemName.value.trim();
+  if (!name) {
+    return;
+  }
+
+  const amount = editItemAmount.value.trim();
+  const shop = editItemShop.value.trim() || "?";
+
+  shoppingItems.value = shoppingItems.value.map((shoppingItem) => {
+    if (shoppingItem.id !== itemId) {
+      return shoppingItem;
+    }
+
+    return {
+      ...shoppingItem,
+      name,
+      amount,
+      shop
+    };
+  });
+
+  closeEditModal();
+}
 </script>
 
 <template>
@@ -433,7 +489,7 @@ async function copyActiveItemsToClipboard(): Promise<void> {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "activeShoppingItems") }}</h3>
           <RoughButton
-            class="px-3 py-2 text-sm font-medium"
+            class="px-3 h-10 text-sm font-medium"
             :disabled="!activeItems.length"
             :title="t(props.language, 'copyActiveItems')"
             :aria-label="t(props.language, 'copyActiveItems')"
@@ -461,7 +517,17 @@ async function copyActiveItemsToClipboard(): Promise<void> {
                   <p class="break-words font-semibold">{{ shoppingItem.name }}</p>
                   <p v-if="shoppingItem.amount" class="text-xs text-[#5e5143]">{{ t(props.language, "amount") }}: {{ shoppingItem.amount }}</p>
                 </div>
-                <RoughButton class="px-3 py-1 text-sm" @click="setItemDone(shoppingItem.id, true)">✓</RoughButton>
+                <div class="flex items-center gap-2">
+                  <RoughButton
+                    class="px-3 h-9 text-sm"
+                    :title="t(props.language, 'editItem')"
+                    :aria-label="t(props.language, 'editItem')"
+                    @click="openEditModal(shoppingItem)"
+                  >
+                    ✎
+                  </RoughButton>
+                  <RoughButton class="px-3 h-9 text-sm" @click="setItemDone(shoppingItem.id, true)">✓</RoughButton>
+                </div>
               </li>
             </ul>
           </section>
@@ -473,13 +539,13 @@ async function copyActiveItemsToClipboard(): Promise<void> {
         <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
           <h3 class="text-2xl font-semibold text-[#3f3024]">{{ t(props.language, "doneShoppingItems") }}</h3>
           <RoughButton
-            class="px-3 pt-2 pb-3 text-sm font-medium"
+            class="px-3  h-10 text-sm font-medium"
             :disabled="!doneItems.length"
             :title="t(props.language, 'clearDoneItems')"
             :aria-label="t(props.language, 'clearDoneItems')"
             @click="clearDoneItems"
           >
-            🗑
+            <HandDrawnIcon name="trashbin" :size="17" />
           </RoughButton>
         </div>
         <ul v-if="doneItems.length" class="space-y-2">
@@ -493,10 +559,52 @@ async function copyActiveItemsToClipboard(): Promise<void> {
               <p v-if="shoppingItem.amount" class="text-xs text-[#5e5143]">{{ t(props.language, "amount") }}: {{ shoppingItem.amount }}</p>
               <p class="text-xs text-[#5e5143]">{{ t(props.language, "shop") }}: {{ shoppingItem.shop }}</p>
             </div>
-            <RoughButton class="px-3 py-1 text-sm" @click="setItemDone(shoppingItem.id, false)">↺</RoughButton>
+            <div class="flex items-center gap-2">
+              <RoughButton
+                class="px-3 text-sm h-9"
+                :title="t(props.language, 'clearDoneItems')"
+                :aria-label="t(props.language, 'clearDoneItems')"
+                @click="removeShoppingItem(shoppingItem.id)"
+              >
+                <HandDrawnIcon name="trashbin" :size="17" />
+              </RoughButton>
+              <RoughButton class="px-3 h-9 text-sm" @click="setItemDone(shoppingItem.id, false)">↺</RoughButton>
+            </div>
           </li>
         </ul>
         <p v-else class="scribble-text">{{ t(props.language, "noShoppingItems") }}</p>
+      </RoughPanel>
+    </div>
+
+    <div v-if="editModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button class="absolute inset-0 bg-[#2d241b]/45" aria-label="Close shopping item edit modal" @click="closeEditModal" />
+      <RoughPanel as="section" class="relative z-10 w-full max-w-md" fill="rgba(255, 248, 232, 0.98)">
+        <h3 class="mb-3 text-3xl font-semibold text-[#3f3024]">{{ t(props.language, "editItem") }}</h3>
+        <form class="space-y-3" @submit.prevent="saveEditedShoppingItem">
+          <label class="block text-base font-semibold text-[#4f4134]">
+            {{ t(props.language, "name") }}
+            <input v-model="editItemName" type="text" class="mt-1 w-full px-3 py-2 text-sm" autofocus />
+          </label>
+
+          <label class="block text-base font-semibold text-[#4f4134]">
+            {{ t(props.language, "amount") }}
+            <input v-model="editItemAmount" type="text" class="mt-1 w-full px-3 py-2 text-sm" />
+          </label>
+
+          <label class="block text-base font-semibold text-[#4f4134]">
+            {{ t(props.language, "shop") }}
+            <input v-model="editItemShop" type="text" class="mt-1 w-full px-3 py-2 text-sm" />
+          </label>
+
+          <div class="flex items-center justify-end gap-2">
+            <RoughButton type="button" class="px-3 py-2 text-sm" @click="closeEditModal">
+              {{ t(props.language, "cancel") }}
+            </RoughButton>
+            <RoughButton type="submit" class="px-3 py-2 text-sm" :disabled="!editItemName.trim()">
+              {{ t(props.language, "save") }}
+            </RoughButton>
+          </div>
+        </form>
       </RoughPanel>
     </div>
   </div>

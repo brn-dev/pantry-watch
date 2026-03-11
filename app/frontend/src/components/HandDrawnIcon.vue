@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const props = withDefaults(
   defineProps<{
-    name: "notebook" | "microphone" | "chef-hat" | "checkmark" | "pencil" | "clipboard" | "cog";
+    name: "notebook" | "microphone" | "chef-hat" | "checkmark" | "pencil" | "clipboard" | "cog" | "trashbin";
     size?: number;
     strokeWidth?: number;
   }>(),
@@ -68,6 +68,14 @@ const props = withDefaults(
           fill="currentColor"
         />
       </g>
+    </template>
+
+    <template v-else-if="props.name === 'trashbin'">
+      <path d="M5.2 6.9H18.8" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linecap="round" />
+      <path d="M9 6.9V5.2C9 4.4 9.6 3.8 10.4 3.8H13.6C14.4 3.8 15 4.4 15 5.2V6.9" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linecap="round" />
+      <path d="M6.9 6.9L7.9 19.1C8 20.1 8.8 20.8 9.8 20.8H14.2C15.2 20.8 16 20.1 16.1 19.1L17.1 6.9" :stroke-width="props.strokeWidth" stroke="currentColor" stroke-linejoin="round" />
+      <path d="M10 10.3V16.9" :stroke-width="Math.max(props.strokeWidth - 0.35, 1.1)" stroke="currentColor" stroke-linecap="round" />
+      <path d="M14 10.3V16.9" :stroke-width="Math.max(props.strokeWidth - 0.35, 1.1)" stroke="currentColor" stroke-linecap="round" />
     </template>
 
     <template v-else>
