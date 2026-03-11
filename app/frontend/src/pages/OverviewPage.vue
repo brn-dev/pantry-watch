@@ -8,11 +8,21 @@ import HandDrawnIcon from "../components/HandDrawnIcon.vue";
 import AddItemModal from "../components/AddItemModal.vue";
 import AddLocationModal from "../components/AddLocationModal.vue";
 import EditExpirationModal from "../components/EditExpirationModal.vue";
+import {
+  createHouseholdItem,
+  createHouseholdLocation,
+  deleteHouseholdItem,
+  patchHouseholdItem,
+  updateHouseholdLocation
+} from "../api/households";
+import { ApiRequestError } from "../api/http";
 
 const processingItemIds = ref<Record<string, boolean>>({});
 const processingLocationIds = ref<Record<string, boolean>>({});
 const processingHouseholdIds = ref<Record<string, boolean>>({});
 const collapsedLocationIds = ref<Record<string, boolean>>({});
+const isAddItemSubmitting = ref(false);
+const pageError = ref("");
 const addItemModal = ref<{
   open: boolean;
   householdId: string;
@@ -28,6 +38,8 @@ const editItemModal = ref<{
   open: boolean;
   householdId: string;
   itemId: string;
+  currentLocationId: string;
+  initialLocationId: string;
   initialItem: {
     name: string;
     quantity: number;
@@ -38,6 +50,8 @@ const editItemModal = ref<{
   open: false,
   householdId: "",
   itemId: "",
+  currentLocationId: "",
+  initialLocationId: "",
   initialItem: null
 });
 const addLocationModal = ref<{
@@ -79,25 +93,27 @@ const editExpirationModal = ref<{
 const props = defineProps<{
   households: Household[];
   language: Language;
-  onDecreaseItem: (householdId: string, itemId: string, currentQuantity: number) => Promise<void>;
-  onCreateLocation: (householdId: string, locationName: string) => Promise<void>;
-  onUpdateLocation: (householdId: string, locationId: string, locationName: string) => Promise<void>;
-  onCreateItem: (
-    householdId: string,
-    locationId: string,
-    input: { name: string; quantity: number; unit: string; expirationDate: string | null }
-  ) => Promise<void>;
-  onUpdateItem: (
-    householdId: string,
-    itemId: string,
-    input: { name: string; quantity: number; unit: string; expirationDate: string | null }
-  ) => Promise<void>;
-  onUpdateItemExpiration: (householdId: string, itemId: string, expirationDate: string | null) => Promise<void>;
+}>();
+
+const emit = defineEmits<{
+  "households-updated": [];
 }>();
 
 function parseDateOnly(value: string): Date {
   const [yearValue, monthValue, dayValue] = value.split("-").map((part) => Number(part));
   return new Date(yearValue, monthValue - 1, dayValue);
+}
+
+function getLocationsForHousehold(householdId: string): { id: string; name: string }[] {
+  const household = props.households.find((candidate) => candidate.id === householdId);
+  if (!household) {
+    return [];
+  }
+
+  return household.locations.map((location) => ({
+    id: location.id,
+    name: location.name
+  }));
 }
 
 function getExpirationTimestamp(expirationDate: string | null): number {
@@ -179,13 +195,21 @@ async function handleDecreaseItem(householdId: string, itemId: string, currentQu
     return;
   }
 
+  pageError.value = "";
   processingItemIds.value = {
     ...processingItemIds.value,
     [itemId]: true
   };
 
   try {
-    await props.onDecreaseItem(householdId, itemId, currentQuantity);
+    if (currentQuantity <= 1) {
+      await deleteHouseholdItem(householdId, itemId);
+    } else {
+      await patchHouseholdItem(householdId, itemId, { quantity: currentQuantity - 1 });
+    }
+    emit("households-updated");
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : t(props.language, "failedLoadHouseholdsGeneric");
   } finally {
     const nextState = { ...processingItemIds.value };
     delete nextState[itemId];
@@ -224,14 +248,22 @@ async function handleAddLocationSubmit(locationName: string): Promise<void> {
     return;
   }
 
+  pageError.value = "";
   processingHouseholdIds.value = {
     ...processingHouseholdIds.value,
     [householdId]: true
   };
 
   try {
-    await props.onCreateLocation(householdId, locationName.trim());
+    await createHouseholdLocation(householdId, locationName.trim());
+    emit("households-updated");
     closeAddLocationModal();
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      pageError.value = t(props.language, "failedCreateLocation", { name: locationName, status: error.status });
+      return;
+    }
+    pageError.value = t(props.language, "failedLoadHouseholdsGeneric");
   } finally {
     const nextState = { ...processingHouseholdIds.value };
     delete nextState[householdId];
@@ -280,14 +312,22 @@ async function handleEditLocationSubmit(locationName: string): Promise<void> {
     return;
   }
 
+  pageError.value = "";
   processingLocationIds.value = {
     ...processingLocationIds.value,
     [locationId]: true
   };
 
   try {
-    await props.onUpdateLocation(householdId, locationId, locationName.trim());
+    await updateHouseholdLocation(householdId, locationId, locationName.trim());
+    emit("households-updated");
     closeEditLocationModal();
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      pageError.value = t(props.language, "failedUpdateLocation", { name: locationName, status: error.status });
+      return;
+    }
+    pageError.value = t(props.language, "failedLoadHouseholdsGeneric");
   } finally {
     const nextState = { ...processingLocationIds.value };
     delete nextState[locationId];
@@ -311,7 +351,7 @@ async function handleAddItem(householdId: string, locationId: string): Promise<v
 }
 
 function closeAddItemModal(): void {
-  if (processingLocationIds.value[addItemModal.value.locationId]) {
+  if (isAddItemSubmitting.value) {
     return;
   }
 
@@ -324,41 +364,46 @@ function closeAddItemModal(): void {
 }
 
 async function handleAddItemSubmit(
-  input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+  input: { name: string; quantity: number; unit: string; expirationDate: string | null; locationId: string | null }
 ): Promise<void> {
   const householdId = addItemModal.value.householdId;
-  const locationId = addItemModal.value.locationId;
+  const locationId = input.locationId ?? addItemModal.value.locationId;
 
-  if (!householdId || !locationId || processingLocationIds.value[locationId]) {
+  if (!householdId || !locationId || isAddItemSubmitting.value) {
     return;
   }
 
-  if (processingLocationIds.value[locationId]) {
-    return;
-  }
-
-  processingLocationIds.value = {
-    ...processingLocationIds.value,
-    [locationId]: true
-  };
+  pageError.value = "";
+  isAddItemSubmitting.value = true;
 
   try {
-    await props.onCreateItem(householdId, locationId, {
+    await createHouseholdItem(householdId, locationId, {
       name: input.name,
       quantity: input.quantity,
       unit: input.unit,
       expirationDate: input.expirationDate
     });
+    emit("households-updated");
     closeAddItemModal();
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      pageError.value = t(props.language, "failedAddItem", { name: input.name, status: error.status });
+      return;
+    }
+    pageError.value = t(props.language, "failedLoadHouseholdsGeneric");
   } finally {
-    const nextState = { ...processingLocationIds.value };
-    delete nextState[locationId];
-    processingLocationIds.value = nextState;
+    isAddItemSubmitting.value = false;
   }
 }
 
-function openEditItemModal(householdId: string, item: PantryItem): void {
+function openEditItemModal(householdId: string, item: PantryItem, currentLocationId: string): void {
   if (processingItemIds.value[item.id]) {
+    return;
+  }
+
+  const locations = getLocationsForHousehold(householdId);
+  const hasCurrentLocation = locations.some((location) => location.id === currentLocationId);
+  if (!hasCurrentLocation) {
     return;
   }
 
@@ -366,6 +411,8 @@ function openEditItemModal(householdId: string, item: PantryItem): void {
     open: true,
     householdId,
     itemId: item.id,
+    currentLocationId,
+    initialLocationId: currentLocationId,
     initialItem: {
       name: item.name,
       quantity: item.quantity,
@@ -384,18 +431,28 @@ function closeEditItemModal(): void {
     open: false,
     householdId: "",
     itemId: "",
+    currentLocationId: "",
+    initialLocationId: "",
     initialItem: null
   };
 }
 
 async function handleEditItemSubmit(
-  input: { name: string; quantity: number; unit: string; expirationDate: string | null }
+  input: { name: string; quantity: number; unit: string; expirationDate: string | null; locationId: string | null }
 ): Promise<void> {
   const householdId = editItemModal.value.householdId;
   const itemId = editItemModal.value.itemId;
+  const currentLocationId = editItemModal.value.currentLocationId;
+  const nextLocationId = input.locationId ?? currentLocationId;
   if (!householdId || !itemId || processingItemIds.value[itemId]) {
     return;
   }
+  if (!nextLocationId) {
+    return;
+  }
+
+  closeEditItemModal();
+  pageError.value = "";
 
   processingItemIds.value = {
     ...processingItemIds.value,
@@ -403,8 +460,16 @@ async function handleEditItemSubmit(
   };
 
   try {
-    await props.onUpdateItem(householdId, itemId, input);
-    closeEditItemModal();
+    await patchHouseholdItem(householdId, itemId, {
+      name: input.name,
+      quantity: input.quantity,
+      unit: input.unit,
+      expirationDate: input.expirationDate,
+      locationId: nextLocationId
+    });
+    emit("households-updated");
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : "Failed to update item";
   } finally {
     const nextState = { ...processingItemIds.value };
     delete nextState[itemId];
@@ -447,14 +512,18 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     return;
   }
 
+  pageError.value = "";
   processingItemIds.value = {
     ...processingItemIds.value,
     [itemId]: true
   };
 
   try {
-    await props.onUpdateItemExpiration(householdId, itemId, expirationDate);
+    await patchHouseholdItem(householdId, itemId, { expirationDate });
+    emit("households-updated");
     closeEditExpirationModal();
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : "Failed to update expiration date";
   } finally {
     const nextState = { ...processingItemIds.value };
     delete nextState[itemId];
@@ -465,6 +534,8 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
 
 <template>
   <RoughPanel class="w-full max-w-full space-y-4">
+    <p v-if="pageError" class="scribble-text font-medium text-[#8f2e2e]">{{ pageError }}</p>
+
     <article
       v-for="household in households"
       :key="household.id"
@@ -548,7 +619,7 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
                   class="h-8 w-9 p-0 text-lg font-bold leading-none"
                   :disabled="!!processingItemIds[item.id]"
                   :title="t(props.language, 'editItem')"
-                  @click="openEditItemModal(household.id, item)"
+                  @click="openEditItemModal(household.id, item, location.id)"
                 >
                   <HandDrawnIcon name="pencil" :size="18" />
                 </RoughButton>
@@ -566,7 +637,9 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     :open="addItemModal.open"
     :language="language"
     :location-name="addItemModal.locationName"
-    :submitting="!!processingLocationIds[addItemModal.locationId]"
+    :available-locations="getLocationsForHousehold(addItemModal.householdId)"
+    :initial-location-id="addItemModal.locationId"
+    :submitting="isAddItemSubmitting"
     @close="closeAddItemModal"
     @submit="handleAddItemSubmit"
   />
@@ -576,6 +649,8 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     :language="language"
     mode="edit"
     :initial-item="editItemModal.initialItem"
+    :available-locations="getLocationsForHousehold(editItemModal.householdId)"
+    :initial-location-id="editItemModal.initialLocationId"
     :submitting="!!processingItemIds[editItemModal.itemId]"
     @close="closeEditItemModal"
     @submit="handleEditItemSubmit"

@@ -109,7 +109,7 @@ const households: Household[] = [
         name: "Fridge",
         items: [
           { id: "item-milk", name: "Milk", quantity: 1, unit: "liter", expirationDate: "2026-03-12" },
-          { id: "item-eggs", name: "Eggs", quantity: 6, unit: "pieces", expirationDate: "2026-03-09" }
+          { id: "item-eggs", name: "Eggs", quantity: 6, unit: "pieces", expirationDate: "2026-03-01" }
         ]
       },
       {

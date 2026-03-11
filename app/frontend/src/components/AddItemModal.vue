@@ -9,6 +9,8 @@ const props = withDefaults(
     open: boolean;
     language: Language;
     locationName?: string;
+    availableLocations?: { id: string; name: string }[];
+    initialLocationId?: string;
     submitting: boolean;
     mode?: "create" | "edit";
     initialItem?: {
@@ -20,6 +22,8 @@ const props = withDefaults(
   }>(),
   {
     locationName: "",
+    availableLocations: () => [],
+    initialLocationId: "",
     mode: "create",
     initialItem: null
   }
@@ -27,20 +31,28 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   close: [];
-  submit: [input: { name: string; quantity: number; unit: string; expirationDate: string | null }];
+  submit: [input: { name: string; quantity: number; unit: string; expirationDate: string | null; locationId: string | null }];
 }>();
 
 const itemName = ref("");
 const quantityInput = ref("1");
 const unit = ref("pcs");
 const expirationDate = ref("");
+const selectedLocationId = ref("");
+
+const hasAvailableLocations = computed<boolean>(() => props.availableLocations.length > 0);
 
 const modalTitle = computed<string>(() => {
   if (props.mode === "edit") {
     return `${t(props.language, "editItem")} - ${props.initialItem?.name ?? ""}`;
   }
 
-  return `${t(props.language, "addItem")} - ${props.locationName}`;
+  const selectedLocationName = props.availableLocations.find((location) => location.id === selectedLocationId.value)?.name;
+  const resolvedLocationName = selectedLocationName ?? props.locationName;
+  if (!resolvedLocationName) {
+    return t(props.language, "addItem");
+  }
+  return `${t(props.language, "addItem")} - ${resolvedLocationName}`;
 });
 
 function resetForm(): void {
@@ -48,6 +60,11 @@ function resetForm(): void {
   quantityInput.value = "1";
   unit.value = "pcs";
   expirationDate.value = "";
+}
+
+function initializeLocationSelection(): void {
+  const fallbackLocationId = props.availableLocations[0]?.id ?? "";
+  selectedLocationId.value = props.initialLocationId || fallbackLocationId;
 }
 
 function closeModal(): void {
@@ -62,6 +79,9 @@ function handleSubmit(): void {
   if (!name) {
     return;
   }
+  if (hasAvailableLocations.value && !selectedLocationId.value) {
+    return;
+  }
 
   const parsedQuantity = Number(quantityInput.value);
   const quantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1;
@@ -71,7 +91,8 @@ function handleSubmit(): void {
     name,
     quantity,
     unit: normalizedUnit,
-    expirationDate: expirationDate.value || null
+    expirationDate: expirationDate.value || null,
+    locationId: hasAvailableLocations.value ? selectedLocationId.value : null
   });
 }
 
@@ -84,10 +105,12 @@ watch(
         quantityInput.value = String(props.initialItem.quantity);
         unit.value = props.initialItem.unit;
         expirationDate.value = props.initialItem.expirationDate ?? "";
+        initializeLocationSelection();
         return;
       }
 
       resetForm();
+      initializeLocationSelection();
     }
   }
 );
@@ -100,6 +123,15 @@ watch(
       <h3 class="mb-3 text-3xl font-semibold text-[#3f3024]">{{ modalTitle }}</h3>
 
       <form class="space-y-3" @submit.prevent="handleSubmit">
+        <label v-if="hasAvailableLocations" class="block text-base font-semibold text-[#4f4134]">
+          {{ t(props.language, "location") }}
+          <select v-model="selectedLocationId" class="mt-1 w-full px-3 py-2 text-sm">
+            <option v-for="location in props.availableLocations" :key="location.id" :value="location.id">
+              {{ location.name }}
+            </option>
+          </select>
+        </label>
+
         <label class="block text-base font-semibold text-[#4f4134]">
           {{ t(props.language, "addItemNamePrompt") }}
           <input v-model="itemName" class="mt-1 w-full px-3 py-2 text-sm" autofocus />

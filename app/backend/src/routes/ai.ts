@@ -12,11 +12,13 @@ type ParseTextBody = {
   text?: string;
   availableLocations?: string[];
   currentDate?: string;
+  llmModel?: string;
 };
 
 type ParseShoppingListTextBody = {
   text?: string;
   currentDate?: string;
+  llmModel?: string;
 };
 
 type ChatRole = "user" | "assistant";
@@ -42,9 +44,30 @@ type AiChatBody = {
   extraIngredients?: string;
   context?: string;
   language?: string;
+  llmModel?: string;
 };
 
 const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
+const supportedLlmModels = ["gpt-5.4", "gpt-5", "gpt-5-mini", "gpt-5-nano"] as const;
+type LlmModel = (typeof supportedLlmModels)[number];
+const defaultLlmModel: LlmModel = "gpt-5-mini";
+
+const parseLlmModel = (value: unknown): LlmModel | null => {
+  if (typeof value !== "string") {
+    return defaultLlmModel;
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return defaultLlmModel;
+  }
+
+  if (supportedLlmModels.includes(trimmedValue as LlmModel)) {
+    return trimmedValue as LlmModel;
+  }
+
+  return null;
+};
 
 const buildParsedItemsEnvelopeSchema = (availableLocations: string[]) => {
   const [firstLocation, ...otherLocations] = availableLocations;
@@ -184,7 +207,8 @@ const extractResponseOutputText = (responseData: unknown): string => {
 const parseItemsWithStructuredOutput = async (
   text: string,
   availableLocations: string[],
-  currentDate: string
+  currentDate: string,
+  llmModel: LlmModel
 ): Promise<ParsedItem[]> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -204,7 +228,7 @@ const parseItemsWithStructuredOutput = async (
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-5-mini",
+      model: llmModel,
       input: [
         {
           role: "system",
@@ -275,7 +299,8 @@ const ParsedShoppingListItemsEnvelopeSchema = z
 
 const parseShoppingListItemsWithStructuredOutput = async (
   text: string,
-  currentDate: string
+  currentDate: string,
+  llmModel: LlmModel
 ): Promise<ParsedShoppingListItem[]> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -294,7 +319,7 @@ const parseShoppingListItemsWithStructuredOutput = async (
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-5-mini",
+      model: llmModel,
       input: [
         {
           role: "system",
@@ -483,7 +508,8 @@ const createAiChefReply = async (
   selectedItems: ReturnType<typeof sanitizeSelectedItems>,
   extraIngredients: string,
   context: string,
-  language?: string
+  language?: string,
+  llmModel: LlmModel = defaultLlmModel
 ): Promise<string> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -498,7 +524,7 @@ const createAiChefReply = async (
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-5-mini",
+      model: llmModel,
       input
     })
   });
@@ -540,6 +566,7 @@ aiRouter.post("/text-to-items", async (req, res) => {
     ? Array.from(new Set(body.availableLocations.map((location) => location.trim()).filter((location) => location.length > 0)))
     : [];
   const currentDate = body.currentDate?.trim();
+  const llmModel = parseLlmModel(body.llmModel);
 
   if (!text) {
     res.status(400).json({ error: "Text is required." });
@@ -553,9 +580,13 @@ aiRouter.post("/text-to-items", async (req, res) => {
     res.status(400).json({ error: "currentDate is required in YYYY-MM-DD format." });
     return;
   }
+  if (!llmModel) {
+    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    return;
+  }
 
   try {
-    const items = await parseItemsWithStructuredOutput(text, availableLocations, currentDate);
+    const items = await parseItemsWithStructuredOutput(text, availableLocations, currentDate, llmModel);
     res.json({ items });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Text parsing failed." });
@@ -566,6 +597,7 @@ aiRouter.post("/shopping-list/text-to-items", async (req, res) => {
   const body = req.body as ParseShoppingListTextBody;
   const text = body.text?.trim();
   const currentDate = body.currentDate?.trim();
+  const llmModel = parseLlmModel(body.llmModel);
 
   if (!text) {
     res.status(400).json({ error: "Text is required." });
@@ -575,9 +607,13 @@ aiRouter.post("/shopping-list/text-to-items", async (req, res) => {
     res.status(400).json({ error: "currentDate is required in YYYY-MM-DD format." });
     return;
   }
+  if (!llmModel) {
+    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    return;
+  }
 
   try {
-    const items = await parseShoppingListItemsWithStructuredOutput(text, currentDate);
+    const items = await parseShoppingListItemsWithStructuredOutput(text, currentDate, llmModel);
     res.json({ items });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Shopping list parsing failed." });
@@ -592,14 +628,19 @@ aiRouter.post("/chat", async (req, res) => {
   const extraIngredients = body.extraIngredients?.trim() ?? "";
   const context = body.context?.trim() ?? "";
   const language = body.language?.trim();
+  const llmModel = parseLlmModel(body.llmModel);
 
   if (!message) {
     res.status(400).json({ error: "Message is required." });
     return;
   }
+  if (!llmModel) {
+    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    return;
+  }
 
   try {
-    const reply = await createAiChefReply(message, history, selectedItems, extraIngredients, context, language);
+    const reply = await createAiChefReply(message, history, selectedItems, extraIngredients, context, language, llmModel);
     res.json({ reply });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "AI chat failed." });
@@ -614,9 +655,14 @@ aiRouter.post("/chat/stream", async (req, res) => {
   const extraIngredients = body.extraIngredients?.trim() ?? "";
   const context = body.context?.trim() ?? "";
   const language = body.language?.trim();
+  const llmModel = parseLlmModel(body.llmModel);
 
   if (!message) {
     res.status(400).json({ error: "Message is required." });
+    return;
+  }
+  if (!llmModel) {
+    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
     return;
   }
 
@@ -647,7 +693,7 @@ aiRouter.post("/chat/stream", async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-5-mini",
+        model: llmModel,
         input,
         stream: true
       }),
