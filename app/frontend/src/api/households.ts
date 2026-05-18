@@ -1,9 +1,9 @@
 import type { Household, PantryLocation } from "@shared/models";
 import type { HouseholdsResponse } from "../types/app";
-import { assertApiOk } from "./http";
+import { apiFetch, assertApiOk } from "./http";
 
 export async function fetchHouseholds(): Promise<Household[]> {
-  const response = await fetch("/api/households");
+  const response = await apiFetch("/api/households");
   assertApiOk(response, "Failed to load households");
 
   const data = (await response.json()) as HouseholdsResponse;
@@ -11,7 +11,7 @@ export async function fetchHouseholds(): Promise<Household[]> {
 }
 
 export async function createHouseholdLocation(householdId: string, locationName: string): Promise<PantryLocation> {
-  const response = await fetch(`/api/households/${householdId}/locations`, {
+  const response = await apiFetch(`/api/households/${householdId}/locations`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -29,7 +29,7 @@ export async function updateHouseholdLocation(
   locationId: string,
   locationName: string
 ): Promise<void> {
-  const response = await fetch(`/api/households/${householdId}/locations/${locationId}`, {
+  const response = await apiFetch(`/api/households/${householdId}/locations/${locationId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
@@ -45,7 +45,7 @@ export async function createHouseholdItem(
   locationId: string,
   input: { name: string; quantity: number; unit: string; expirationDate: string | null }
 ): Promise<void> {
-  const response = await fetch(`/api/households/${householdId}/locations/${locationId}/items`, {
+  const response = await apiFetch(`/api/households/${householdId}/locations/${locationId}/items`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -72,7 +72,7 @@ export async function patchHouseholdItem(
     locationId: string;
   }>
 ): Promise<void> {
-  const response = await fetch(`/api/households/${householdId}/items/${itemId}`, {
+  const response = await apiFetch(`/api/households/${householdId}/items/${itemId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
@@ -84,7 +84,7 @@ export async function patchHouseholdItem(
 }
 
 export async function deleteHouseholdItem(householdId: string, itemId: string): Promise<void> {
-  const response = await fetch(`/api/households/${householdId}/items/${itemId}`, {
+  const response = await apiFetch(`/api/households/${householdId}/items/${itemId}`, {
     method: "DELETE"
   });
 

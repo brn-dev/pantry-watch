@@ -1,9 +1,14 @@
 import type { Household, PantryLocation as Location, ShoppingListItem } from "@shared/models";
 
-export const households: Household[] = [
+export type StoredHousehold = Household & {
+  accessToken: string;
+};
+
+export const households: StoredHousehold[] = [
   {
     id: "household-1",
     name: "Default Household",
+    accessToken: "default-token",
     locations: [
       {
         id: "loc-fridge",
@@ -33,7 +38,11 @@ export const makeId = (prefix: string): string => {
   return `${prefix}-${Date.now()}-${idCounter}`;
 };
 
-export const findHousehold = (householdId: string): Household | undefined => {
+export const publicHouseholds = (): Household[] => {
+  return households.map(({ accessToken: _accessToken, ...household }) => household);
+};
+
+export const findHousehold = (householdId: string): StoredHousehold | undefined => {
   return households.find((household) => household.id === householdId);
 };
 

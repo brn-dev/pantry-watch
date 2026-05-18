@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { findHousehold, households } from "../mockStore.js";
+import { findHousehold, publicHouseholds } from "../mockStore.js";
 
 export const householdsRouter = Router();
 
 householdsRouter.get("/", (_req, res) => {
-  res.json({ households });
+  res.json({ households: publicHouseholds() });
 });
 
 householdsRouter.get("/:householdId/locations-with-items", (req, res) => {

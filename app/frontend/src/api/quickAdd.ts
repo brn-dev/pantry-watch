@@ -1,10 +1,10 @@
 import type { Language } from "../i18n";
 import type { LlmModel, ParsedItemsResponse, RecordingResult, RecordingTextResponse } from "../types/app";
-import { assertApiOk } from "./http";
+import { apiFetch, assertApiOk } from "./http";
 
 export async function transcribeVoiceToText(recordingResult: RecordingResult, language: Language): Promise<string> {
   const audioBase64 = await blobToBase64(recordingResult.audioBlob);
-  const response = await fetch("/api/ai/voice-to-text", {
+  const response = await apiFetch("/api/ai/voice-to-text", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -28,7 +28,7 @@ export async function parseTextToItems(input: {
   currentDate: string;
   llmModel: LlmModel;
 }): Promise<ParsedItemsResponse["items"]> {
-  const response = await fetch("/api/ai/text-to-items", {
+  const response = await apiFetch("/api/ai/text-to-items", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

@@ -4,7 +4,9 @@ import morgan from "morgan";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireHouseholdAccess } from "./auth.js";
 import { aiRouter } from "./routes/ai.js";
+import { authRouter } from "./routes/auth.js";
 import { householdsRouter } from "./routes/households.js";
 import { locationsRouter } from "./routes/locations.js";
 import { pantryItemsRouter } from "./routes/pantryItems.js";
@@ -61,6 +63,9 @@ app.get("/", (_req, res) => {
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+app.use("/api/auth", authRouter);
+app.use("/api", requireHouseholdAccess);
 
 app.get("/api/hello", (_req, res) => {
   res.json({ message: "Backend is reachable." });

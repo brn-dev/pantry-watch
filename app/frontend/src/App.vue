@@ -10,7 +10,15 @@ import RoughPanel from "./components/RoughPanel.vue";
 import HandDrawnIcon from "./components/HandDrawnIcon.vue";
 import SettingsModal from "./components/SettingsModal.vue";
 import { t, type Language, type TranslationKey } from "./i18n";
-import { getStoredLanguage, getStoredLlmModel, setStoredLanguage, setStoredLlmModel } from "./utils/localPersistence";
+import {
+  getStoredHouseholdCredentials,
+  getStoredLanguage,
+  getStoredLlmModel,
+  setStoredHouseholdCredentials,
+  setStoredLanguage,
+  setStoredLlmModel,
+  type HouseholdCredential
+} from "./utils/localPersistence";
 import type { LlmModel } from "./types/app";
 import { fetchHouseholds } from "./api/households";
 import { ApiRequestError } from "./api/http";
@@ -24,6 +32,11 @@ const routePath = ref(window.location.pathname);
 const isSettingsModalOpen = ref(false);
 const availableLlmModels: LlmModel[] = ["gpt-5.4", "gpt-5", "gpt-5-mini", "gpt-5-nano"];
 const selectedLlmModel = ref<LlmModel>("gpt-5-mini");
+const householdCredentials = ref<HouseholdCredential[]>([]);
+
+const shouldShowMissingTokenOverlay = computed<boolean>(() => {
+  return !isSettingsModalOpen.value && !householdCredentials.value.length;
+});
 
 const activePage = computed<"overview" | "quick-add" | "ai-chef" | "shopping-list">(() => {
   if (routePath.value.startsWith("/shopping-list")) {
@@ -55,6 +68,20 @@ function updateLlmModel(nextModel: string): void {
 
   selectedLlmModel.value = nextModel as LlmModel;
   void setStoredLlmModel(selectedLlmModel.value);
+}
+
+async function applyHouseholdCredentials(nextCredentials: HouseholdCredential[]): Promise<void> {
+  householdCredentials.value = nextCredentials;
+  const credentialsToStore = nextCredentials
+    .map((credential) => ({
+      householdId: credential.householdId.trim(),
+      accessToken: credential.accessToken
+    }))
+    .filter((credential) => credential.householdId && credential.accessToken);
+
+  householdCredentials.value = credentialsToStore;
+  await setStoredHouseholdCredentials(credentialsToStore);
+  await loadHouseholds();
 }
 
 function openSettingsModal(): void {
@@ -114,6 +141,8 @@ onMounted(() => {
     if (storedLlmModel && availableLlmModels.includes(storedLlmModel as LlmModel)) {
       selectedLlmModel.value = storedLlmModel as LlmModel;
     }
+
+    householdCredentials.value = await getStoredHouseholdCredentials();
   })();
 
   if (window.location.pathname === "/") {
@@ -184,7 +213,7 @@ onUnmounted(() => {
             </span>
           </RoughButton>
         </nav>
-        <div class="ml-auto flex items-center gap-1">
+        <div class="relative ml-auto flex items-center gap-1">
           <RoughButton
             class="px-1.5 py-0.5 text-xs leading-none sm:px-2 sm:py-1 sm:text-sm"
             :fill="'rgba(255, 251, 238, 0.95)'"
@@ -194,6 +223,37 @@ onUnmounted(() => {
           >
             <HandDrawnIcon name="cog" :size="20" />
           </RoughButton>
+
+          <div
+            v-if="shouldShowMissingTokenOverlay"
+            class="pointer-events-none absolute right-16 top-[calc(100%+0.7rem)] z-50 w-max max-w-[calc(100vw-5rem)]"
+            aria-live="polite"
+          >
+            <svg
+              class="token-overlay-arrow absolute bottom-[calc(100%-2.7rem)] right-[-3rem] h-14 w-12 text-[#8f4f2c]"
+              viewBox="0 0 56 64"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 58C23 45 33 34 41 19"
+                stroke="currentColor"
+                stroke-width="3.5"
+                stroke-linecap="round"
+                stroke-dasharray="6 5"
+              />
+              <path
+                d="M30 21L43 16L43 30"
+                stroke="currentColor"
+                stroke-width="3.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <div class="flex min-h-20 items-center justify-center rounded-md border border-[#6f5a47]/45 bg-[#fff1c7] px-4 py-2 text-center text-lg font-semibold leading-tight text-[#3e3023] shadow-[0_8px_24px_rgba(62,48,35,0.22),0_2px_6px_rgba(62,48,35,0.18)]">
+              {{ translate("addHouseholdTokenPrompt") }}
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -203,9 +263,11 @@ onUnmounted(() => {
       :language="language"
       :selected-llm-model="selectedLlmModel"
       :available-llm-models="availableLlmModels"
+      :household-credentials="householdCredentials"
       @close="closeSettingsModal"
       @language-change="updateLanguage"
       @llm-model-change="updateLlmModel"
+      @household-credentials-apply="applyHouseholdCredentials"
     />
 
     <div class="page-transition-stage">
@@ -433,6 +495,36 @@ onUnmounted(() => {
 
   .page-rip-leave-active {
     clip-path: inset(5rem 0 0 -3.5rem);
+  }
+}
+
+.token-overlay-arrow {
+  animation: token-overlay-arrow-wiggle 2600ms ease-in-out infinite;
+  transform-box: view-box;
+  transform-origin: 12px 58px;
+}
+
+@keyframes token-overlay-arrow-wiggle {
+  0%,
+  58%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  66% {
+    transform: rotate(-5deg);
+  }
+
+  74% {
+    transform: rotate(4deg);
+  }
+
+  82% {
+    transform: rotate(-2deg);
+  }
+
+  90% {
+    transform: rotate(0deg);
   }
 }
 </style>

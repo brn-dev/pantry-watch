@@ -5,6 +5,7 @@ import { t, type Language } from "../i18n";
 import RoughButton from "../components/RoughButton.vue";
 import RoughPanel from "../components/RoughPanel.vue";
 import VoiceRecorderButton from "../components/VoiceRecorderButton.vue";
+import { apiFetch } from "../api/http";
 
 type ChatRole = "user" | "assistant";
 
@@ -238,7 +239,7 @@ async function handleRecordingStop(recordingResult: RecordingResult): Promise<vo
 
   try {
     const audioBase64 = await blobToBase64(recordingResult.audioBlob);
-    const response = await fetch("/api/ai/voice-to-text", {
+    const response = await apiFetch("/api/ai/voice-to-text", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -350,7 +351,7 @@ function parseSseEvent(block: string): { event: string; data: string } | null {
 }
 
 async function streamAiChefReply(payload: AiChefStreamRequest, onDelta: (delta: string) => void): Promise<string> {
-  const response = await fetch("/api/ai/chat/stream", {
+  const response = await apiFetch("/api/ai/chat/stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

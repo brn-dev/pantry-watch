@@ -5,6 +5,7 @@ import RoughButton from "../components/RoughButton.vue";
 import RoughPanel from "../components/RoughPanel.vue";
 import HandDrawnIcon from "../components/HandDrawnIcon.vue";
 import VoiceRecorderButton from "../components/VoiceRecorderButton.vue";
+import { apiFetch } from "../api/http";
 
 type ShoppingListItem = {
   id: string;
@@ -206,7 +207,7 @@ async function handleRecordingStop(recordingResult: RecordingResult): Promise<vo
 
   try {
     const audioBase64 = await blobToBase64(recordingResult.audioBlob);
-    const response = await fetch("/api/ai/voice-to-text", {
+    const response = await apiFetch("/api/ai/voice-to-text", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -258,7 +259,7 @@ async function parseShoppingListText(): Promise<void> {
 
   try {
     const currentDate = new Date().toISOString().slice(0, 10);
-    const response = await fetch("/api/ai/shopping-list/text-to-items", {
+    const response = await apiFetch("/api/ai/shopping-list/text-to-items", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
