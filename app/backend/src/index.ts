@@ -1,10 +1,11 @@
 import cors from "cors";
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import morgan from "morgan";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireHouseholdAccess } from "./auth.js";
+import { initializeStore, StoreNotFoundError } from "./store.js";
 import { aiRouter } from "./routes/ai.js";
 import { authRouter } from "./routes/auth.js";
 import { householdsRouter } from "./routes/households.js";
@@ -12,16 +13,14 @@ import { locationsRouter } from "./routes/locations.js";
 import { pantryItemsRouter } from "./routes/pantryItems.js";
 import { shoppingListRouter } from "./routes/shoppingList.js";
 
-const loadBackendEnvFile = (): void => {
-  const currentFilePath = fileURLToPath(import.meta.url);
-  const backendRootPath = resolve(dirname(currentFilePath), "..");
-  const envFilePath = resolve(backendRootPath, ".env.local");
+const parseBackendEnvFile = (envFilePath: string): Record<string, string> => {
   if (!existsSync(envFilePath)) {
-    return;
+    return {};
   }
 
   const envFileContent = readFileSync(envFilePath, "utf8");
   const lines = envFileContent.split(/\r?\n/u);
+  const values: Record<string, string> = {};
 
   for (const line of lines) {
     const trimmedLine = line.trim();
@@ -36,16 +35,35 @@ const loadBackendEnvFile = (): void => {
 
     const key = trimmedLine.slice(0, delimiterIndex).trim();
     const rawValue = trimmedLine.slice(delimiterIndex + 1).trim();
-    if (!key || process.env[key] !== undefined) {
+    if (!key) {
       continue;
     }
 
     const isQuoted = rawValue.length >= 2 && rawValue.startsWith("\"") && rawValue.endsWith("\"");
-    process.env[key] = isQuoted ? rawValue.slice(1, -1) : rawValue;
+    values[key] = isQuoted ? rawValue.slice(1, -1) : rawValue;
+  }
+
+  return values;
+};
+
+const loadBackendEnvFiles = (): void => {
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const backendRootPath = resolve(dirname(currentFilePath), "..");
+  const fileValues = {
+    ...parseBackendEnvFile(resolve(backendRootPath, ".env")),
+    ...parseBackendEnvFile(resolve(backendRootPath, ".env.local"))
+  };
+
+  for (const [key, value] of Object.entries(fileValues)) {
+    if (process.env[key] !== undefined) {
+      continue;
+    }
+
+    process.env[key] = value;
   }
 };
 
-loadBackendEnvFile();
+loadBackendEnvFiles();
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -77,6 +95,32 @@ app.use("/api/households/:householdId/locations", locationsRouter);
 app.use("/api/households/:householdId", pantryItemsRouter);
 app.use("/api/households/:householdId/shopping-list", shoppingListRouter);
 
-app.listen(port, () => {
-  console.log(`Backend listening on http://localhost:${port}`);
+const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
+  if (error instanceof StoreNotFoundError) {
+    res.status(404).json({ error: error.message });
+    return;
+  }
+
+  console.error(error);
+  res.status(500).json({ error: "Internal server error." });
+};
+
+app.use(errorHandler);
+
+const startServer = async (): Promise<void> => {
+  await initializeStore();
+
+  app.listen(port, () => {
+    console.log(`Backend listening on http://localhost:${port}`);
+  });
+};
+
+startServer().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
 });

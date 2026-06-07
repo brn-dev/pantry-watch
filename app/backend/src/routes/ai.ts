@@ -48,9 +48,9 @@ type AiChatBody = {
 };
 
 const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
-const supportedLlmModels = ["gpt-5.4", "gpt-5", "gpt-5-mini", "gpt-5-nano"] as const;
+const supportedLlmModels = ["gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4", "gpt-5", "gpt-5-mini", "gpt-5-nano"] as const;
 type LlmModel = (typeof supportedLlmModels)[number];
-const defaultLlmModel: LlmModel = "gpt-5-mini";
+const defaultLlmModel: LlmModel = "gpt-5.4-mini";
 
 const parseLlmModel = (value: unknown): LlmModel | null => {
   if (typeof value !== "string") {

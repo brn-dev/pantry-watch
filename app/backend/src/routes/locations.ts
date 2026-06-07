@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { PantryLocation as Location } from "@shared/models";
-import { findHousehold, findLocation, makeId, normalizeText } from "../mockStore.js";
+import { addLocation, deleteLocation, findHousehold, findLocation, makeId, normalizeText, renameLocation } from "../store.js";
 
 type CreateLocationBody = {
   name?: string;
@@ -16,8 +16,8 @@ const getHouseholdId = (params: Record<string, string>): string => {
   return params.householdId;
 };
 
-locationsRouter.post("/", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+locationsRouter.post("/", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -42,12 +42,17 @@ locationsRouter.post("/", (req, res) => {
     items: []
   };
 
-  household.locations.push(location);
+  const added = await addLocation(household.id, location);
+  if (!added) {
+    res.status(409).json({ error: "Location already exists." });
+    return;
+  }
+
   res.status(201).json(location);
 });
 
-locationsRouter.patch("/:locationId", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+locationsRouter.patch("/:locationId", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -74,12 +79,17 @@ locationsRouter.patch("/:locationId", (req, res) => {
     return;
   }
 
-  location.name = nextName;
-  res.json(location);
+  const renamed = await renameLocation(household.id, location.id, nextName);
+  if (!renamed) {
+    res.status(409).json({ error: "Location name already in use." });
+    return;
+  }
+
+  res.json({ ...location, name: nextName });
 });
 
-locationsRouter.delete("/:locationId", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+locationsRouter.delete("/:locationId", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -91,6 +101,7 @@ locationsRouter.delete("/:locationId", (req, res) => {
     return;
   }
 
-  const [deletedLocation] = household.locations.splice(locationIndex, 1);
+  const deletedLocation = household.locations[locationIndex];
+  await deleteLocation(household.id, deletedLocation.id);
   res.json(deletedLocation);
 });

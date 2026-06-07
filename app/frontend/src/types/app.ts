@@ -23,7 +23,7 @@ export type RecordingResult = {
   durationMs: number;
 };
 
-export type LlmModel = "gpt-5.4" | "gpt-5" | "gpt-5-mini" | "gpt-5-nano";
+export type LlmModel = "gpt-5.4" | "gpt-5.4-mini" | "gpt-5.4-nano" | "gpt-5" | "gpt-5-mini" | "gpt-5-nano";
 
 export type CreateOverviewItemInput = {
   name: string;

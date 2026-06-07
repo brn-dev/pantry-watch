@@ -254,10 +254,11 @@ async function handleAddLocationSubmit(locationName: string): Promise<void> {
     [householdId]: true
   };
 
+  let createdLocation = false;
   try {
     await createHouseholdLocation(householdId, locationName.trim());
     emit("households-updated");
-    closeAddLocationModal();
+    createdLocation = true;
   } catch (error) {
     if (error instanceof ApiRequestError) {
       pageError.value = t(props.language, "failedCreateLocation", { name: locationName, status: error.status });
@@ -268,6 +269,10 @@ async function handleAddLocationSubmit(locationName: string): Promise<void> {
     const nextState = { ...processingHouseholdIds.value };
     delete nextState[householdId];
     processingHouseholdIds.value = nextState;
+  }
+
+  if (createdLocation) {
+    closeAddLocationModal();
   }
 }
 
@@ -376,6 +381,7 @@ async function handleAddItemSubmit(
   pageError.value = "";
   isAddItemSubmitting.value = true;
 
+  let createdItem = false;
   try {
     await createHouseholdItem(householdId, locationId, {
       name: input.name,
@@ -384,7 +390,7 @@ async function handleAddItemSubmit(
       expirationDate: input.expirationDate
     });
     emit("households-updated");
-    closeAddItemModal();
+    createdItem = true;
   } catch (error) {
     if (error instanceof ApiRequestError) {
       pageError.value = t(props.language, "failedAddItem", { name: input.name, status: error.status });
@@ -393,6 +399,10 @@ async function handleAddItemSubmit(
     pageError.value = t(props.language, "failedLoadHouseholdsGeneric");
   } finally {
     isAddItemSubmitting.value = false;
+  }
+
+  if (createdItem) {
+    closeAddItemModal();
   }
 }
 

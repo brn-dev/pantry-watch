@@ -30,8 +30,8 @@ const language = ref<Language>("en");
 
 const routePath = ref(window.location.pathname);
 const isSettingsModalOpen = ref(false);
-const availableLlmModels: LlmModel[] = ["gpt-5.4", "gpt-5", "gpt-5-mini", "gpt-5-nano"];
-const selectedLlmModel = ref<LlmModel>("gpt-5-mini");
+const availableLlmModels: LlmModel[] = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"];
+const selectedLlmModel = ref<LlmModel>("gpt-5.4-mini");
 const householdCredentials = ref<HouseholdCredential[]>([]);
 
 const shouldShowMissingTokenOverlay = computed<boolean>(() => {

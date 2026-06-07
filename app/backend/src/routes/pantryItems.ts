@@ -1,6 +1,15 @@
 import { Router } from "express";
 import type { PantryItem as Item, PantryLocation as Location } from "@shared/models";
-import { findHousehold, findLocation, makeId, normalizeExpirationDate } from "../mockStore.js";
+import {
+  addPantryItem,
+  deletePantryItem,
+  findHousehold,
+  findLocation,
+  makeId,
+  movePantryItem,
+  normalizeExpirationDate,
+  updatePantryItem
+} from "../store.js";
 
 type CreateItemBody = {
   name?: string;
@@ -23,8 +32,8 @@ const getHouseholdId = (params: Record<string, string>): string => {
   return params.householdId;
 };
 
-pantryItemsRouter.post("/locations/:locationId/items", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+pantryItemsRouter.post("/locations/:locationId/items", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -65,12 +74,12 @@ pantryItemsRouter.post("/locations/:locationId/items", (req, res) => {
     expirationDate
   };
 
-  location.items.push(item);
+  await addPantryItem(household.id, location.id, item);
   res.status(201).json(item);
 });
 
-pantryItemsRouter.patch("/items/:itemId", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+pantryItemsRouter.patch("/items/:itemId", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -139,15 +148,17 @@ pantryItemsRouter.patch("/items/:itemId", (req, res) => {
       return;
     }
 
-    const [movedItem] = sourceLocation.items.splice(itemIndex, 1);
-    targetLocation.items.push(movedItem);
+    await movePantryItem(household.id, item.id, item, targetLocation.id);
+    res.json(item);
+    return;
   }
 
+  await updatePantryItem(household.id, item.id, item);
   res.json(item);
 });
 
-pantryItemsRouter.delete("/items/:itemId", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+pantryItemsRouter.delete("/items/:itemId", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -156,7 +167,8 @@ pantryItemsRouter.delete("/items/:itemId", (req, res) => {
   for (const location of household.locations) {
     const itemIndex = location.items.findIndex((item) => item.id === req.params.itemId);
     if (itemIndex >= 0) {
-      const [deletedItem] = location.items.splice(itemIndex, 1);
+      const deletedItem = location.items[itemIndex];
+      await deletePantryItem(household.id, deletedItem.id);
       res.json(deletedItem);
       return;
     }

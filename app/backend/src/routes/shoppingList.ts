@@ -1,6 +1,14 @@
 import { Router } from "express";
 import type { ShoppingListItem } from "@shared/models";
-import { findHousehold, findShoppingListItem, makeId } from "../mockStore.js";
+import {
+  addShoppingListItem,
+  deleteDoneShoppingListItems,
+  deleteShoppingListItem,
+  findHousehold,
+  findShoppingListItem,
+  makeId,
+  updateShoppingListItem
+} from "../store.js";
 
 type CreateShoppingListItemBody = {
   name?: string;
@@ -17,8 +25,8 @@ const getHouseholdId = (params: Record<string, string>): string => {
   return params.householdId;
 };
 
-shoppingListRouter.get("/", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+shoppingListRouter.get("/", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -27,8 +35,8 @@ shoppingListRouter.get("/", (req, res) => {
   res.json({ items: household.shoppingList });
 });
 
-shoppingListRouter.post("/items", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+shoppingListRouter.post("/items", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -49,12 +57,12 @@ shoppingListRouter.post("/items", (req, res) => {
     done: body.done ?? false
   };
 
-  household.shoppingList.push(item);
+  await addShoppingListItem(household.id, item);
   res.status(201).json(item);
 });
 
-shoppingListRouter.patch("/items/:itemId", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+shoppingListRouter.patch("/items/:itemId", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -89,11 +97,12 @@ shoppingListRouter.patch("/items/:itemId", (req, res) => {
     item.done = body.done;
   }
 
+  await updateShoppingListItem(household.id, item.id, item);
   res.json(item);
 });
 
-shoppingListRouter.delete("/items/:itemId", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+shoppingListRouter.delete("/items/:itemId", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
@@ -105,18 +114,19 @@ shoppingListRouter.delete("/items/:itemId", (req, res) => {
     return;
   }
 
-  const [deletedItem] = household.shoppingList.splice(itemIndex, 1);
+  const deletedItem = household.shoppingList[itemIndex];
+  await deleteShoppingListItem(household.id, deletedItem.id);
   res.json(deletedItem);
 });
 
-shoppingListRouter.delete("/done", (req, res) => {
-  const household = findHousehold(getHouseholdId(req.params));
+shoppingListRouter.delete("/done", async (req, res) => {
+  const household = await findHousehold(getHouseholdId(req.params));
   if (!household) {
     res.status(404).json({ error: "Household not found." });
     return;
   }
 
   const deletedItems = household.shoppingList.filter((item) => item.done);
-  household.shoppingList = household.shoppingList.filter((item) => !item.done);
+  await deleteDoneShoppingListItems(household.id);
   res.json({ deletedItems });
 });

@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { findHousehold } from "./mockStore.js";
+import { findHousehold } from "./store.js";
 
 const AUTHENTICATED_HOUSEHOLD_ID_HEADER = "x-household-id";
 const ACCESS_TOKEN_HEADER = "x-access-token";
@@ -17,12 +17,12 @@ const getHouseholdIdFromRequest = (path: string): string | null => {
   return match?.groups?.householdId ? decodeURIComponent(match.groups.householdId) : null;
 };
 
-export const hasHouseholdAccess = (householdId: string, accessToken: string): boolean => {
-  const household = findHousehold(householdId);
+export const hasHouseholdAccess = async (householdId: string, accessToken: string): Promise<boolean> => {
+  const household = await findHousehold(householdId);
   return !!household && household.accessToken === accessToken;
 };
 
-export const requireHouseholdAccess: RequestHandler = (req, res, next) => {
+export const requireHouseholdAccess: RequestHandler = async (req, res, next) => {
   const providedHouseholdId = getHeaderValue(req.headers[AUTHENTICATED_HOUSEHOLD_ID_HEADER]);
   const providedAccessToken = getHeaderValue(req.headers[ACCESS_TOKEN_HEADER]);
 
@@ -31,8 +31,8 @@ export const requireHouseholdAccess: RequestHandler = (req, res, next) => {
     return;
   }
 
-  const authenticatedHousehold = findHousehold(providedHouseholdId);
-  if (!hasHouseholdAccess(providedHouseholdId, providedAccessToken) || !authenticatedHousehold) {
+  const authenticatedHousehold = await findHousehold(providedHouseholdId);
+  if (!(await hasHouseholdAccess(providedHouseholdId, providedAccessToken)) || !authenticatedHousehold) {
     res.status(401).json({ error: "Invalid household id or access token." });
     return;
   }
