@@ -323,10 +323,11 @@ async function handleEditLocationSubmit(locationName: string): Promise<void> {
     [locationId]: true
   };
 
+  let updatedLocation = false;
   try {
     await updateHouseholdLocation(householdId, locationId, locationName.trim());
     emit("households-updated");
-    closeEditLocationModal();
+    updatedLocation = true;
   } catch (error) {
     if (error instanceof ApiRequestError) {
       pageError.value = t(props.language, "failedUpdateLocation", { name: locationName, status: error.status });
@@ -337,6 +338,10 @@ async function handleEditLocationSubmit(locationName: string): Promise<void> {
     const nextState = { ...processingLocationIds.value };
     delete nextState[locationId];
     processingLocationIds.value = nextState;
+  }
+
+  if (updatedLocation) {
+    closeEditLocationModal();
   }
 }
 
@@ -461,14 +466,12 @@ async function handleEditItemSubmit(
     return;
   }
 
-  closeEditItemModal();
-  pageError.value = "";
-
   processingItemIds.value = {
     ...processingItemIds.value,
     [itemId]: true
   };
 
+  let updatedItem = false;
   try {
     await patchHouseholdItem(householdId, itemId, {
       name: input.name,
@@ -478,12 +481,17 @@ async function handleEditItemSubmit(
       locationId: nextLocationId
     });
     emit("households-updated");
+    updatedItem = true;
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : "Failed to update item";
   } finally {
     const nextState = { ...processingItemIds.value };
     delete nextState[itemId];
     processingItemIds.value = nextState;
+  }
+
+  if (updatedItem) {
+    closeEditItemModal();
   }
 }
 
@@ -528,16 +536,21 @@ async function handleEditExpirationSubmit(expirationDate: string | null): Promis
     [itemId]: true
   };
 
+  let updatedExpirationDate = false;
   try {
     await patchHouseholdItem(householdId, itemId, { expirationDate });
     emit("households-updated");
-    closeEditExpirationModal();
+    updatedExpirationDate = true;
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : "Failed to update expiration date";
   } finally {
     const nextState = { ...processingItemIds.value };
     delete nextState[itemId];
     processingItemIds.value = nextState;
+  }
+
+  if (updatedExpirationDate) {
+    closeEditExpirationModal();
   }
 }
 </script>
