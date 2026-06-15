@@ -6,6 +6,26 @@ export type StoredHousehold = Household & {
   storageRevision?: number;
 };
 
+type StoredLlmModel = {
+  name: string;
+  sortOrder: number;
+  isDefault: boolean;
+};
+
+export type LlmModelsConfig = {
+  models: string[];
+  defaultModel: string | null;
+};
+
+const defaultLlmModels: StoredLlmModel[] = [
+  { name: "gpt-5.4", sortOrder: 0, isDefault: false },
+  { name: "gpt-5.4-mini", sortOrder: 1, isDefault: true },
+  { name: "gpt-5.4-nano", sortOrder: 2, isDefault: false },
+  { name: "gpt-5", sortOrder: 3, isDefault: false },
+  { name: "gpt-5-mini", sortOrder: 4, isDefault: false },
+  { name: "gpt-5-nano", sortOrder: 5, isDefault: false }
+];
+
 const defaultHouseholds: StoredHousehold[] = [
   {
     id: "household-1",
@@ -37,6 +57,7 @@ const defaultHouseholds: StoredHousehold[] = [
 let idCounter = 1;
 let mongoClient: MongoClient | null = null;
 let householdsCollection: Collection<StoredHousehold> | null = null;
+let llmModelsCollection: Collection<StoredLlmModel> | null = null;
 
 export class StoreNotFoundError extends Error {
   constructor(message: string) {
@@ -75,6 +96,14 @@ const getHouseholdsCollection = (): Collection<StoredHousehold> => {
   return householdsCollection;
 };
 
+const getLlmModelsCollection = (): Collection<StoredLlmModel> => {
+  if (!llmModelsCollection) {
+    throw new Error("MongoDB storage has not been initialized.");
+  }
+
+  return llmModelsCollection;
+};
+
 export const initializeStore = async (): Promise<void> => {
   const connectionString = getMongoConnectionString();
   mongoClient = new MongoClient(connectionString);
@@ -82,6 +111,8 @@ export const initializeStore = async (): Promise<void> => {
 
   const databaseName = getMongoDatabaseName(connectionString);
   householdsCollection = mongoClient.db(databaseName).collection<StoredHousehold>("households");
+  llmModelsCollection = mongoClient.db(databaseName).collection<StoredLlmModel>("llmModels");
+
   await householdsCollection.createIndex({ id: 1 }, { unique: true });
   await householdsCollection.createIndex({ accessToken: 1 });
   await householdsCollection.updateMany({ storageRevision: { $exists: false } }, { $set: { storageRevision: 0 } });
@@ -89,6 +120,14 @@ export const initializeStore = async (): Promise<void> => {
   const existingHouseholdCount = await householdsCollection.countDocuments({}, { limit: 1 });
   if (existingHouseholdCount === 0) {
     await householdsCollection.insertMany(defaultHouseholds);
+  }
+
+  await llmModelsCollection.createIndex({ name: 1 }, { unique: true });
+  await llmModelsCollection.createIndex({ sortOrder: 1 }, { unique: true });
+
+  const existingLlmModelCount = await llmModelsCollection.countDocuments({}, { limit: 1 });
+  if (existingLlmModelCount === 0) {
+    await llmModelsCollection.insertMany(defaultLlmModels);
   }
 };
 
@@ -102,6 +141,18 @@ export const publicHouseholds = async (): Promise<Household[]> => {
     .find({}, { projection: { _id: 0, accessToken: 0, storageRevision: 0 } })
     .toArray();
   return households;
+};
+
+export const listAvailableLlmModels = async (): Promise<LlmModelsConfig> => {
+  const models = await getLlmModelsCollection()
+    .find({}, { projection: { _id: 0, name: 1, isDefault: 1 } })
+    .sort({ sortOrder: 1, name: 1 })
+    .toArray();
+
+  return {
+    models: models.map((model) => model.name),
+    defaultModel: models.find((model) => model.isDefault)?.name ?? null
+  };
 };
 
 export const findHousehold = async (householdId: string): Promise<StoredHousehold | null> => {

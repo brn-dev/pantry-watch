@@ -21,6 +21,7 @@ import {
 } from "./utils/localPersistence";
 import type { LlmModel } from "./types/app";
 import { fetchHouseholds } from "./api/households";
+import { fetchAvailableLlmModels } from "./api/aiModels";
 import { ApiRequestError } from "./api/http";
 
 const households = ref<Household[]>([]);
@@ -30,9 +31,12 @@ const language = ref<Language>("en");
 
 const routePath = ref(window.location.pathname);
 const isSettingsModalOpen = ref(false);
-const availableLlmModels: LlmModel[] = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"];
-const selectedLlmModel = ref<LlmModel>("gpt-5.4-mini");
+const availableLlmModels = ref<LlmModel[]>([]);
+const selectedLlmModel = ref<LlmModel>("");
+const loadingLlmModels = ref(false);
+const llmModelsError = ref("");
 const householdCredentials = ref<HouseholdCredential[]>([]);
+let llmModelsRequestId = 0;
 
 const shouldShowMissingTokenOverlay = computed<boolean>(() => {
   return !isSettingsModalOpen.value && !householdCredentials.value.length;
@@ -62,12 +66,20 @@ function updateLanguage(nextLanguage: Language): void {
 }
 
 function updateLlmModel(nextModel: string): void {
-  if (!nextModel || !availableLlmModels.includes(nextModel as LlmModel)) {
+  if (!nextModel || !availableLlmModels.value.includes(nextModel)) {
     return;
   }
 
-  selectedLlmModel.value = nextModel as LlmModel;
+  selectedLlmModel.value = nextModel;
   void setStoredLlmModel(selectedLlmModel.value);
+}
+
+function clearAvailableLlmModels(): void {
+  llmModelsRequestId += 1;
+  availableLlmModels.value = [];
+  selectedLlmModel.value = "";
+  loadingLlmModels.value = false;
+  llmModelsError.value = "";
 }
 
 async function applyHouseholdCredentials(nextCredentials: HouseholdCredential[]): Promise<void> {
@@ -81,11 +93,77 @@ async function applyHouseholdCredentials(nextCredentials: HouseholdCredential[])
 
   householdCredentials.value = credentialsToStore;
   await setStoredHouseholdCredentials(credentialsToStore);
-  await loadHouseholds();
+
+  if (!credentialsToStore.length) {
+    clearAvailableLlmModels();
+    await loadHouseholds();
+    return;
+  }
+
+  const storedLlmModel = await getStoredLlmModel();
+  await Promise.all([
+    loadHouseholds(),
+    loadAvailableLlmModels(storedLlmModel)
+  ]);
+}
+
+async function loadAvailableLlmModels(storedLlmModel: string | null): Promise<void> {
+  const requestId = ++llmModelsRequestId;
+  loadingLlmModels.value = true;
+  llmModelsError.value = "";
+
+  try {
+    const llmModelsConfig = await fetchAvailableLlmModels();
+    if (requestId !== llmModelsRequestId) {
+      return;
+    }
+
+    availableLlmModels.value = llmModelsConfig.models;
+
+    const configuredDefaultModel =
+      llmModelsConfig.defaultModel && llmModelsConfig.models.includes(llmModelsConfig.defaultModel)
+        ? llmModelsConfig.defaultModel
+        : null;
+    const nextSelectedModel =
+      (storedLlmModel && llmModelsConfig.models.includes(storedLlmModel) && storedLlmModel) ||
+      configuredDefaultModel ||
+      llmModelsConfig.models[0] ||
+      "";
+
+    selectedLlmModel.value = nextSelectedModel;
+
+    if (nextSelectedModel && nextSelectedModel !== storedLlmModel) {
+      await setStoredLlmModel(nextSelectedModel);
+    }
+  } catch (error) {
+    if (requestId !== llmModelsRequestId) {
+      return;
+    }
+
+    llmModelsError.value =
+      error instanceof ApiRequestError
+        ? translate("failedLoadAiModels", { status: error.status })
+        : translate("failedLoadAiModelsGeneric");
+  } finally {
+    if (requestId === llmModelsRequestId) {
+      loadingLlmModels.value = false;
+    }
+  }
 }
 
 function openSettingsModal(): void {
   isSettingsModalOpen.value = true;
+  if (householdCredentials.value.length) {
+    void loadAvailableLlmModels(selectedLlmModel.value || null);
+  }
+}
+
+function retryLoadAvailableLlmModels(): void {
+  if (!householdCredentials.value.length) {
+    return;
+  }
+
+  void loadAvailableLlmModels(selectedLlmModel.value || null);
 }
 
 function closeSettingsModal(): void {
@@ -138,11 +216,11 @@ onMounted(() => {
     }
 
     const storedLlmModel = await getStoredLlmModel();
-    if (storedLlmModel && availableLlmModels.includes(storedLlmModel as LlmModel)) {
-      selectedLlmModel.value = storedLlmModel as LlmModel;
-    }
-
     householdCredentials.value = await getStoredHouseholdCredentials();
+
+    if (householdCredentials.value.length) {
+      void loadAvailableLlmModels(storedLlmModel);
+    }
   })();
 
   if (window.location.pathname === "/") {
@@ -263,10 +341,13 @@ onUnmounted(() => {
       :language="language"
       :selected-llm-model="selectedLlmModel"
       :available-llm-models="availableLlmModels"
+      :loading-llm-models="loadingLlmModels"
+      :llm-models-error="llmModelsError"
       :household-credentials="householdCredentials"
       @close="closeSettingsModal"
       @language-change="updateLanguage"
       @llm-model-change="updateLlmModel"
+      @retry-llm-models="retryLoadAvailableLlmModels"
       @household-credentials-apply="applyHouseholdCredentials"
     />
 
@@ -323,8 +404,13 @@ onUnmounted(() => {
                 @households-updated="loadHouseholds"
               />
 
-              <AiChefPage v-else-if="activePage === 'ai-chef'" :households="households" :language="language" />
-              <ShoppingListPage v-else :language="language" />
+              <AiChefPage
+                v-else-if="activePage === 'ai-chef'"
+                :households="households"
+                :language="language"
+                :llm-model="selectedLlmModel"
+              />
+              <ShoppingListPage v-else :language="language" :llm-model="selectedLlmModel" />
             </template>
           </div>
         </section>

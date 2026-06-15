@@ -1,6 +1,7 @@
 import { Router, type Response } from "express";
 import { z } from "zod/v3";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { listAvailableLlmModels } from "../store.js";
 
 type VoiceToTextBody = {
   audioBase64?: string;
@@ -48,22 +49,18 @@ type AiChatBody = {
 };
 
 const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
-const supportedLlmModels = ["gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4", "gpt-5", "gpt-5-mini", "gpt-5-nano"] as const;
-type LlmModel = (typeof supportedLlmModels)[number];
-const defaultLlmModel: LlmModel = "gpt-5.4-mini";
-
-const parseLlmModel = (value: unknown): LlmModel | null => {
+const parseLlmModel = (value: unknown, availableLlmModels: string[], defaultLlmModel: string | null): string | null => {
   if (typeof value !== "string") {
-    return defaultLlmModel;
+    return defaultLlmModel ?? availableLlmModels[0] ?? null;
   }
 
   const trimmedValue = value.trim();
   if (!trimmedValue) {
-    return defaultLlmModel;
+    return defaultLlmModel ?? availableLlmModels[0] ?? null;
   }
 
-  if (supportedLlmModels.includes(trimmedValue as LlmModel)) {
-    return trimmedValue as LlmModel;
+  if (availableLlmModels.includes(trimmedValue)) {
+    return trimmedValue;
   }
 
   return null;
@@ -208,7 +205,7 @@ const parseItemsWithStructuredOutput = async (
   text: string,
   availableLocations: string[],
   currentDate: string,
-  llmModel: LlmModel
+  llmModel: string
 ): Promise<ParsedItem[]> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -300,7 +297,7 @@ const ParsedShoppingListItemsEnvelopeSchema = z
 const parseShoppingListItemsWithStructuredOutput = async (
   text: string,
   currentDate: string,
-  llmModel: LlmModel
+  llmModel: string
 ): Promise<ParsedShoppingListItem[]> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -509,11 +506,14 @@ const createAiChefReply = async (
   extraIngredients: string,
   context: string,
   language?: string,
-  llmModel: LlmModel = defaultLlmModel
+  llmModel?: string
 ): Promise<string> => {
   const openAiApiKey = process.env.OPENAI_API_KEY;
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
+  }
+  if (!llmModel) {
+    throw new Error("No AI model is configured.");
   }
   const input = buildAiChefInput(message, history, selectedItems, extraIngredients, context, language);
 
@@ -566,7 +566,8 @@ aiRouter.post("/text-to-items", async (req, res) => {
     ? Array.from(new Set(body.availableLocations.map((location) => location.trim()).filter((location) => location.length > 0)))
     : [];
   const currentDate = body.currentDate?.trim();
-  const llmModel = parseLlmModel(body.llmModel);
+  const { models: availableLlmModels, defaultModel } = await listAvailableLlmModels();
+  const llmModel = parseLlmModel(body.llmModel, availableLlmModels, defaultModel);
 
   if (!text) {
     res.status(400).json({ error: "Text is required." });
@@ -580,8 +581,12 @@ aiRouter.post("/text-to-items", async (req, res) => {
     res.status(400).json({ error: "currentDate is required in YYYY-MM-DD format." });
     return;
   }
+  if (!availableLlmModels.length) {
+    res.status(500).json({ error: "No AI models are configured." });
+    return;
+  }
   if (!llmModel) {
-    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    res.status(400).json({ error: `llmModel must be one of: ${availableLlmModels.join(", ")}` });
     return;
   }
 
@@ -597,7 +602,8 @@ aiRouter.post("/shopping-list/text-to-items", async (req, res) => {
   const body = req.body as ParseShoppingListTextBody;
   const text = body.text?.trim();
   const currentDate = body.currentDate?.trim();
-  const llmModel = parseLlmModel(body.llmModel);
+  const { models: availableLlmModels, defaultModel } = await listAvailableLlmModels();
+  const llmModel = parseLlmModel(body.llmModel, availableLlmModels, defaultModel);
 
   if (!text) {
     res.status(400).json({ error: "Text is required." });
@@ -607,8 +613,12 @@ aiRouter.post("/shopping-list/text-to-items", async (req, res) => {
     res.status(400).json({ error: "currentDate is required in YYYY-MM-DD format." });
     return;
   }
+  if (!availableLlmModels.length) {
+    res.status(500).json({ error: "No AI models are configured." });
+    return;
+  }
   if (!llmModel) {
-    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    res.status(400).json({ error: `llmModel must be one of: ${availableLlmModels.join(", ")}` });
     return;
   }
 
@@ -628,14 +638,19 @@ aiRouter.post("/chat", async (req, res) => {
   const extraIngredients = body.extraIngredients?.trim() ?? "";
   const context = body.context?.trim() ?? "";
   const language = body.language?.trim();
-  const llmModel = parseLlmModel(body.llmModel);
+  const { models: availableLlmModels, defaultModel } = await listAvailableLlmModels();
+  const llmModel = parseLlmModel(body.llmModel, availableLlmModels, defaultModel);
 
   if (!message) {
     res.status(400).json({ error: "Message is required." });
     return;
   }
+  if (!availableLlmModels.length) {
+    res.status(500).json({ error: "No AI models are configured." });
+    return;
+  }
   if (!llmModel) {
-    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    res.status(400).json({ error: `llmModel must be one of: ${availableLlmModels.join(", ")}` });
     return;
   }
 
@@ -655,14 +670,19 @@ aiRouter.post("/chat/stream", async (req, res) => {
   const extraIngredients = body.extraIngredients?.trim() ?? "";
   const context = body.context?.trim() ?? "";
   const language = body.language?.trim();
-  const llmModel = parseLlmModel(body.llmModel);
+  const { models: availableLlmModels, defaultModel } = await listAvailableLlmModels();
+  const llmModel = parseLlmModel(body.llmModel, availableLlmModels, defaultModel);
 
   if (!message) {
     res.status(400).json({ error: "Message is required." });
     return;
   }
+  if (!availableLlmModels.length) {
+    res.status(500).json({ error: "No AI models are configured." });
+    return;
+  }
   if (!llmModel) {
-    res.status(400).json({ error: `llmModel must be one of: ${supportedLlmModels.join(", ")}` });
+    res.status(400).json({ error: `llmModel must be one of: ${availableLlmModels.join(", ")}` });
     return;
   }
 

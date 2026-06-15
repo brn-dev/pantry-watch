@@ -13,6 +13,8 @@ const props = defineProps<{
   language: Language;
   selectedLlmModel: string;
   availableLlmModels: string[];
+  loadingLlmModels: boolean;
+  llmModelsError: string;
   householdCredentials: HouseholdCredential[];
 }>();
 
@@ -20,6 +22,7 @@ const emit = defineEmits<{
   close: [];
   languageChange: [nextLanguage: Language];
   llmModelChange: [nextModel: string];
+  retryLlmModels: [];
   householdCredentialsApply: [credentials: HouseholdCredential[]];
 }>();
 
@@ -229,12 +232,28 @@ function translate(key: TranslationKey, params?: Record<string, string | number>
             id="llm-model-select"
             class="mt-2 w-full rounded-md border border-[#6f5a47]/45 bg-[#fffdf5] px-3 py-2 text-sm text-[#3e3023] outline-none focus:border-[#6f5a47]"
             :value="selectedLlmModel"
+            :disabled="loadingLlmModels || !availableLlmModels.length"
             @change="updateLlmModel"
           >
+            <option v-if="!availableLlmModels.length" value="">
+              {{ translate(loadingLlmModels ? "loadingAiModels" : "aiModelUnavailable") }}
+            </option>
             <option v-for="model in availableLlmModels" :key="model" :value="model">
               {{ model }}
             </option>
           </select>
+          <div v-if="llmModelsError" class="mt-2 flex items-center justify-between gap-2">
+            <p class="text-sm font-medium text-[#8f2e2e]">
+              {{ llmModelsError }}
+            </p>
+            <RoughButton
+              class="shrink-0 px-2 py-1 text-sm"
+              :disabled="loadingLlmModels"
+              @click="emit('retryLlmModels')"
+            >
+              {{ translate("retry") }}
+            </RoughButton>
+          </div>
 
           <div class="mt-4 space-y-2">
             <div class="flex items-center justify-between gap-2">

@@ -42,6 +42,7 @@ type AiChefStreamRequest = {
   extraIngredients: string;
   context: string;
   language: Language;
+  llmModel: string;
   message: string;
   history: ChatMessage[];
 };
@@ -60,6 +61,7 @@ type HouseholdItem = {
 const props = defineProps<{
   households: Household[];
   language: Language;
+  llmModel: string;
 }>();
 
 const selectedHouseholdIds = ref<string[]>([]);
@@ -434,6 +436,11 @@ async function sendMessage(): Promise<void> {
     return;
   }
 
+  if (!props.llmModel) {
+    aiChefError.value = t(props.language, "aiModelUnavailable");
+    return;
+  }
+
   if (!selectedHouseholdIds.value.length) {
     aiChefError.value = t(props.language, "aiChefSelectAtLeastOneHousehold");
     return;
@@ -468,6 +475,7 @@ async function sendMessage(): Promise<void> {
         extraIngredients: extraIngredients.value,
         context: additionalContext.value,
         language: props.language,
+        llmModel: props.llmModel,
         message: prompt,
         history: previousHistory
       },
@@ -634,7 +642,7 @@ async function sendMessage(): Promise<void> {
 
         <RoughButton
           class="ml-auto px-3 py-2 text-sm font-medium"
-          :disabled="sendingMessage"
+          :disabled="sendingMessage || !llmModel"
           @click="sendMessage"
         >
           {{ t(props.language, "sendToAiChef") }}

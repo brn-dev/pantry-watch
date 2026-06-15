@@ -48,6 +48,7 @@ type ActiveItemsByShop = {
 
 const props = defineProps<{
   language: Language;
+  llmModel: string;
 }>();
 
 const nextItemName = ref("");
@@ -253,6 +254,10 @@ async function parseShoppingListText(): Promise<void> {
     shoppingParseError.value = t(props.language, "enterTextFirst");
     return;
   }
+  if (!props.llmModel) {
+    shoppingParseError.value = t(props.language, "aiModelUnavailable");
+    return;
+  }
 
   shoppingParseError.value = "";
   shoppingParseStatus.value = t(props.language, "parsingShoppingList");
@@ -266,7 +271,8 @@ async function parseShoppingListText(): Promise<void> {
       },
       body: JSON.stringify({
         text: shoppingInputText.value,
-        currentDate
+        currentDate,
+        llmModel: props.llmModel
       })
     });
 
@@ -427,7 +433,11 @@ function saveEditedShoppingItem(): void {
             @recording-error="handleRecordingError"
           />
 
-          <RoughButton class="px-3 py-2 text-sm font-medium" @click="parseShoppingListText">
+          <RoughButton
+            class="px-3 py-2 text-sm font-medium"
+            :disabled="!llmModel"
+            @click="parseShoppingListText"
+          >
             {{ t(props.language, "parseText") }}
           </RoughButton>
         </div>

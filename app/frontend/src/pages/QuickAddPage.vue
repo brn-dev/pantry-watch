@@ -197,6 +197,10 @@ async function parseInputText(): Promise<void> {
     quickAddError.value = t(props.language, "enterTextFirst");
     return;
   }
+  if (!props.llmModel) {
+    quickAddError.value = t(props.language, "aiModelUnavailable");
+    return;
+  }
   if (!selectedHousehold.value) {
     quickAddError.value = t(props.language, "householdNotFound");
     return;
@@ -332,6 +336,7 @@ async function addParsedItemsByLocation(): Promise<void> {
 
         <RoughButton
           class="px-3 py-2 text-sm font-medium"
+          :disabled="!llmModel"
           @click="parseInputText"
         >
           {{ t(props.language, "parseText") }}
