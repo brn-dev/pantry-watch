@@ -1,4 +1,11 @@
-import type { Household, PantryItem, PantryLocation as Location, ShoppingListItem } from "@shared/models";
+import type {
+  AiChefChat,
+  AiChefChatMessage,
+  Household,
+  PantryItem,
+  PantryLocation as Location,
+  ShoppingListItem
+} from "@shared/models";
 import { MongoClient, type Collection } from "mongodb";
 
 export type StoredHousehold = Household & {
@@ -11,6 +18,8 @@ type StoredLlmModel = {
   sortOrder: number;
   isDefault: boolean;
 };
+
+type StoredAiChefChat = AiChefChat;
 
 export type LlmModelsConfig = {
   models: string[];
@@ -58,6 +67,7 @@ let idCounter = 1;
 let mongoClient: MongoClient | null = null;
 let householdsCollection: Collection<StoredHousehold> | null = null;
 let llmModelsCollection: Collection<StoredLlmModel> | null = null;
+let aiChefChatsCollection: Collection<StoredAiChefChat> | null = null;
 
 export class StoreNotFoundError extends Error {
   constructor(message: string) {
@@ -104,6 +114,14 @@ const getLlmModelsCollection = (): Collection<StoredLlmModel> => {
   return llmModelsCollection;
 };
 
+const getAiChefChatsCollection = (): Collection<StoredAiChefChat> => {
+  if (!aiChefChatsCollection) {
+    throw new Error("MongoDB storage has not been initialized.");
+  }
+
+  return aiChefChatsCollection;
+};
+
 export const initializeStore = async (): Promise<void> => {
   const connectionString = getMongoConnectionString();
   mongoClient = new MongoClient(connectionString);
@@ -112,6 +130,7 @@ export const initializeStore = async (): Promise<void> => {
   const databaseName = getMongoDatabaseName(connectionString);
   householdsCollection = mongoClient.db(databaseName).collection<StoredHousehold>("households");
   llmModelsCollection = mongoClient.db(databaseName).collection<StoredLlmModel>("llmModels");
+  aiChefChatsCollection = mongoClient.db(databaseName).collection<StoredAiChefChat>("aiChefChats");
 
   await householdsCollection.createIndex({ id: 1 }, { unique: true });
   await householdsCollection.createIndex({ accessToken: 1 });
@@ -129,6 +148,9 @@ export const initializeStore = async (): Promise<void> => {
   if (existingLlmModelCount === 0) {
     await llmModelsCollection.insertMany(defaultLlmModels);
   }
+
+  await aiChefChatsCollection.createIndex({ id: 1 }, { unique: true });
+  await aiChefChatsCollection.createIndex({ householdId: 1, updatedAt: -1 });
 };
 
 export const makeId = (prefix: string): string => {
@@ -153,6 +175,59 @@ export const listAvailableLlmModels = async (): Promise<LlmModelsConfig> => {
     models: models.map((model) => model.name),
     defaultModel: models.find((model) => model.isDefault)?.name ?? null
   };
+};
+
+export const listAiChefChats = async (householdId: string): Promise<AiChefChat[]> => {
+  return getAiChefChatsCollection()
+    .find({ householdId }, { projection: { _id: 0 } })
+    .sort({ updatedAt: -1 })
+    .toArray();
+};
+
+export const findAiChefChat = async (householdId: string, chatId: string): Promise<AiChefChat | null> => {
+  return getAiChefChatsCollection().findOne({ householdId, id: chatId }, { projection: { _id: 0 } });
+};
+
+export const createAiChefChat = async (
+  householdId: string,
+  messages: AiChefChatMessage[]
+): Promise<AiChefChat> => {
+  const timestamp = new Date().toISOString();
+  const chat: AiChefChat = {
+    id: makeId("ai-chef-chat"),
+    householdId,
+    messages,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  await getAiChefChatsCollection().insertOne(chat);
+  return chat;
+};
+
+export const addAiChefChatMessages = async (
+  householdId: string,
+  chatId: string,
+  messages: AiChefChatMessage[]
+): Promise<AiChefChat> => {
+  const result = await getAiChefChatsCollection().updateOne(
+    { householdId, id: chatId },
+    {
+      $push: { messages: { $each: messages } },
+      $set: { updatedAt: new Date().toISOString() }
+    }
+  );
+
+  if (result.matchedCount === 0) {
+    throw new StoreNotFoundError("AI Chef chat not found.");
+  }
+
+  const chat = await findAiChefChat(householdId, chatId);
+  if (!chat) {
+    throw new StoreNotFoundError("AI Chef chat not found.");
+  }
+
+  return chat;
 };
 
 export const findHousehold = async (householdId: string): Promise<StoredHousehold | null> => {

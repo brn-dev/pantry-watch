@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { requireHouseholdAccess } from "./auth.js";
 import { initializeStore, StoreNotFoundError } from "./store.js";
 import { aiRouter } from "./routes/ai.js";
+import { aiChefChatsRouter } from "./routes/aiChefChats.js";
 import { aiModelsRouter } from "./routes/aiModels.js";
 import { authRouter } from "./routes/auth.js";
 import { householdsRouter } from "./routes/households.js";
@@ -91,6 +92,7 @@ app.get("/api/hello", (_req, res) => {
 });
 
 app.use("/api/ai/models", aiModelsRouter);
+app.use("/api/ai/chats", aiChefChatsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/households", householdsRouter);
 app.use("/api/households/:householdId/locations", locationsRouter);

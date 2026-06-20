@@ -26,3 +26,20 @@ export type Household = {
   locations: PantryLocation[];
   shoppingList: ShoppingListItem[];
 };
+
+export type AiChefChatRole = "user" | "assistant";
+
+export type AiChefChatMessage = {
+  id: string;
+  role: AiChefChatRole;
+  content: string;
+  createdAt: string;
+};
+
+export type AiChefChat = {
+  id: string;
+  householdId: string;
+  messages: AiChefChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+};

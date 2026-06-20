@@ -42,8 +42,6 @@ type AiChatBody = {
   message?: string;
   history?: ChatMessage[];
   selectedItems?: ChatSelectedItem[];
-  extraIngredients?: string;
-  context?: string;
   language?: string;
   llmModel?: string;
 };
@@ -431,12 +429,10 @@ const buildAiChefInput = (
   message: string,
   history: ChatMessage[],
   selectedItems: ReturnType<typeof sanitizeSelectedItems>,
-  extraIngredients: string,
-  context: string,
   language?: string
 ): {
   role: "system" | "user" | "assistant";
-  content: { type: "input_text"; text: string }[];
+  content: { type: "input_text" | "output_text"; text: string }[];
 }[] => {
   const pantrySummary = selectedItems.length
     ? selectedItems
@@ -452,14 +448,12 @@ const buildAiChefInput = (
     "You are AI Chef for a pantry app. " +
     "Give practical cooking suggestions based on available pantry items and user context. " +
     "If ingredients are missing, explicitly list short substitutes or a minimal shopping list. " +
-    "Prefer concise, actionable responses with sections: Best idea, Why it fits, Steps, Optional upgrades.";
+    "Prefer concise, actionable responses. Pay attention to the expiration date of the products and warn the user if appropriate.";
 
   const userPrompt = [
     `Preferred language: ${language?.trim() || "en"}`,
     "Selected pantry items:",
     pantrySummary,
-    `Extra ingredients: ${extraIngredients || "(none)"}`,
-    `Additional context: ${context || "(none)"}`,
     `Latest user message: ${message}`
   ].join("\n");
 
@@ -468,10 +462,13 @@ const buildAiChefInput = (
       role: "system",
       content: [{ type: "input_text", text: systemPrompt }]
     },
-    ...history.map((entry) => ({
-      role: entry.role,
-      content: [{ type: "input_text" as const, text: entry.content }]
-    })),
+    ...history.map((entry) => {
+      const contentType: "input_text" | "output_text" = entry.role === "assistant" ? "output_text" : "input_text";
+      return {
+        role: entry.role,
+        content: [{ type: contentType, text: entry.content }]
+      };
+    }),
     {
       role: "user",
       content: [{ type: "input_text", text: userPrompt }]
@@ -503,8 +500,6 @@ const createAiChefReply = async (
   message: string,
   history: ChatMessage[],
   selectedItems: ReturnType<typeof sanitizeSelectedItems>,
-  extraIngredients: string,
-  context: string,
   language?: string,
   llmModel?: string
 ): Promise<string> => {
@@ -515,7 +510,7 @@ const createAiChefReply = async (
   if (!llmModel) {
     throw new Error("No AI model is configured.");
   }
-  const input = buildAiChefInput(message, history, selectedItems, extraIngredients, context, language);
+  const input = buildAiChefInput(message, history, selectedItems, language);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -635,8 +630,6 @@ aiRouter.post("/chat", async (req, res) => {
   const message = body.message?.trim();
   const history = sanitizeChatHistory(body.history);
   const selectedItems = sanitizeSelectedItems(body.selectedItems);
-  const extraIngredients = body.extraIngredients?.trim() ?? "";
-  const context = body.context?.trim() ?? "";
   const language = body.language?.trim();
   const { models: availableLlmModels, defaultModel } = await listAvailableLlmModels();
   const llmModel = parseLlmModel(body.llmModel, availableLlmModels, defaultModel);
@@ -655,7 +648,7 @@ aiRouter.post("/chat", async (req, res) => {
   }
 
   try {
-    const reply = await createAiChefReply(message, history, selectedItems, extraIngredients, context, language, llmModel);
+    const reply = await createAiChefReply(message, history, selectedItems, language, llmModel);
     res.json({ reply });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "AI chat failed." });
@@ -667,8 +660,6 @@ aiRouter.post("/chat/stream", async (req, res) => {
   const message = body.message?.trim();
   const history = sanitizeChatHistory(body.history);
   const selectedItems = sanitizeSelectedItems(body.selectedItems);
-  const extraIngredients = body.extraIngredients?.trim() ?? "";
-  const context = body.context?.trim() ?? "";
   const language = body.language?.trim();
   const { models: availableLlmModels, defaultModel } = await listAvailableLlmModels();
   const llmModel = parseLlmModel(body.llmModel, availableLlmModels, defaultModel);
@@ -697,7 +688,7 @@ aiRouter.post("/chat/stream", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
-  const input = buildAiChefInput(message, history, selectedItems, extraIngredients, context, language);
+  const input = buildAiChefInput(message, history, selectedItems, language);
   const abortController = new AbortController();
   res.on("close", () => {
     if (!res.writableEnded) {
@@ -706,6 +697,7 @@ aiRouter.post("/chat/stream", async (req, res) => {
   });
 
   try {
+    console.log(llmModel)
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
