@@ -204,6 +204,14 @@ function renderChatMarkdown(value: string): string {
       continue;
     }
 
+    const headingMatch = /^(?<marks>#{1,4})\s+(?<content>.+)$/u.exec(trimmedLine);
+    if (headingMatch?.groups?.marks && headingMatch.groups.content) {
+      closeList();
+      const headingLevel = headingMatch.groups.marks.length;
+      htmlParts.push(`<h${headingLevel}>${renderInlineMarkdown(headingMatch.groups.content)}</h${headingLevel}>`);
+      continue;
+    }
+
     const numberedListMatch = /^(?<number>\d+)\.\s+(?<content>.+)$/u.exec(trimmedLine);
     if (numberedListMatch?.groups?.content) {
       if (activeList !== "ol") {
@@ -682,7 +690,8 @@ async function sendMessage(): Promise<void> {
 </script>
 
 <template>
-  <RoughPanel class="w-full max-w-full space-y-4">
+  <RoughPanel class="w-full max-w-full">
+    <div class="space-y-4">
     <div class="space-y-3 rounded-md border border-[#7f6a55]/35 bg-[#fffaf0]/80 p-3">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -872,6 +881,7 @@ async function sendMessage(): Promise<void> {
       <p v-if="aiChefStatus" class="scribble-text text-[#1f5872]">{{ aiChefStatus }}</p>
       <p v-if="aiChefError" class="scribble-text font-medium text-[#8f2e2e]">{{ aiChefError }}</p>
     </RoughPanel>
+    </div>
   </RoughPanel>
 </template>
 
@@ -882,8 +892,38 @@ async function sendMessage(): Promise<void> {
 
 .chat-markdown :deep(p:last-child),
 .chat-markdown :deep(ol:last-child),
-.chat-markdown :deep(ul:last-child) {
+.chat-markdown :deep(ul:last-child),
+.chat-markdown :deep(h1:last-child),
+.chat-markdown :deep(h2:last-child),
+.chat-markdown :deep(h3:last-child),
+.chat-markdown :deep(h4:last-child) {
   margin-bottom: 0;
+}
+
+.chat-markdown :deep(h1),
+.chat-markdown :deep(h2),
+.chat-markdown :deep(h3),
+.chat-markdown :deep(h4) {
+  margin: 0.7rem 0 0.35rem;
+  color: #3f3225;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.chat-markdown :deep(h1) {
+  font-size: 1.15rem;
+}
+
+.chat-markdown :deep(h2) {
+  font-size: 1.05rem;
+}
+
+.chat-markdown :deep(h3) {
+  font-size: 1rem;
+}
+
+.chat-markdown :deep(h4) {
+  font-size: 0.95rem;
 }
 
 .chat-markdown :deep(ol),

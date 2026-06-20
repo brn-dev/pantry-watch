@@ -425,6 +425,18 @@ const sanitizeSelectedItems = (selectedItems: unknown): Required<Pick<ChatSelect
     .slice(0, 200);
 };
 
+function getTodayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isExpired(expirationDate: string | null, todayDate: string): boolean {
+  return expirationDate !== null && expirationDate < todayDate;
+}
+
 const buildAiChefInput = (
   message: string,
   history: ChatMessage[],
@@ -434,12 +446,14 @@ const buildAiChefInput = (
   role: "system" | "user" | "assistant";
   content: { type: "input_text" | "output_text"; text: string }[];
 }[] => {
+  const todayDate = getTodayDateString();
   const pantrySummary = selectedItems.length
     ? selectedItems
       .map((item) => {
         const unitPart = item.unit ? ` ${item.unit}` : "";
         const expirationPart = item.expirationDate ? `, expires ${item.expirationDate}` : "";
-        return `- ${item.quantity}${unitPart} ${item.name} (${item.householdName}/${item.locationName}${expirationPart})`;
+        const expiredFlag = isExpired(item.expirationDate, todayDate) ? "yes" : "no";
+        return `- ${item.quantity}${unitPart} ${item.name} (${item.householdName}/${item.locationName}${expirationPart}, expired: ${expiredFlag})`;
       })
       .join("\n")
     : "- no selected pantry items";
