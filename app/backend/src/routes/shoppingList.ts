@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { ShoppingListItem } from "@shared/models";
+import { notifyHouseholdChanged } from "../realtime.js";
 import {
   addShoppingListItem,
   deleteDoneShoppingListItems,
@@ -58,6 +59,7 @@ shoppingListRouter.post("/items", async (req, res) => {
   };
 
   await addShoppingListItem(household.id, item);
+  notifyHouseholdChanged(household.id, "shopping-list");
   res.status(201).json(item);
 });
 
@@ -98,6 +100,7 @@ shoppingListRouter.patch("/items/:itemId", async (req, res) => {
   }
 
   await updateShoppingListItem(household.id, item.id, item);
+  notifyHouseholdChanged(household.id, "shopping-list");
   res.json(item);
 });
 
@@ -116,6 +119,7 @@ shoppingListRouter.delete("/items/:itemId", async (req, res) => {
 
   const deletedItem = household.shoppingList[itemIndex];
   await deleteShoppingListItem(household.id, deletedItem.id);
+  notifyHouseholdChanged(household.id, "shopping-list");
   res.json(deletedItem);
 });
 
@@ -128,5 +132,6 @@ shoppingListRouter.delete("/done", async (req, res) => {
 
   const deletedItems = household.shoppingList.filter((item) => item.done);
   await deleteDoneShoppingListItems(household.id);
+  notifyHouseholdChanged(household.id, "shopping-list");
   res.json({ deletedItems });
 });

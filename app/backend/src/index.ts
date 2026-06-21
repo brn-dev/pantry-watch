@@ -1,10 +1,12 @@
 import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import morgan from "morgan";
+import { createServer } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireHouseholdAccess } from "./auth.js";
+import { initializeRealtime } from "./realtime.js";
 import { initializeStore, StoreNotFoundError } from "./store.js";
 import { aiRouter } from "./routes/ai.js";
 import { aiChefChatsRouter } from "./routes/aiChefChats.js";
@@ -119,7 +121,10 @@ app.use(errorHandler);
 const startServer = async (): Promise<void> => {
   await initializeStore();
 
-  app.listen(port, () => {
+  const server = createServer(app);
+  initializeRealtime(server);
+
+  server.listen(port, () => {
     console.log(`Backend listening on http://localhost:${port}`);
   });
 };

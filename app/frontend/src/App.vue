@@ -23,6 +23,7 @@ import type { LlmModel } from "./types/app";
 import { fetchHouseholds } from "./api/households";
 import { fetchAvailableLlmModels } from "./api/aiModels";
 import { ApiRequestError } from "./api/http";
+import { connectHouseholdUpdates, type RealtimeConnection } from "./api/realtime";
 
 const households = ref<Household[]>([]);
 const loadingHouseholds = ref(false);
@@ -37,6 +38,8 @@ const loadingLlmModels = ref(false);
 const llmModelsError = ref("");
 const householdCredentials = ref<HouseholdCredential[]>([]);
 let llmModelsRequestId = 0;
+let realtimeConnection: RealtimeConnection | null = null;
+let realtimeRefreshTimer: number | null = null;
 
 const shouldShowMissingTokenOverlay = computed<boolean>(() => {
   return !isSettingsModalOpen.value && !householdCredentials.value.length;
@@ -82,6 +85,27 @@ function clearAvailableLlmModels(): void {
   llmModelsError.value = "";
 }
 
+function scheduleRealtimeHouseholdsRefresh(): void {
+  if (realtimeRefreshTimer !== null) {
+    return;
+  }
+
+  realtimeRefreshTimer = window.setTimeout(() => {
+    realtimeRefreshTimer = null;
+    void loadHouseholds();
+  }, 150);
+}
+
+function closeRealtimeConnection(): void {
+  realtimeConnection?.close();
+  realtimeConnection = null;
+}
+
+function refreshRealtimeConnection(): void {
+  closeRealtimeConnection();
+  realtimeConnection = connectHouseholdUpdates(householdCredentials.value, scheduleRealtimeHouseholdsRefresh);
+}
+
 async function applyHouseholdCredentials(nextCredentials: HouseholdCredential[]): Promise<void> {
   householdCredentials.value = nextCredentials;
   const credentialsToStore = nextCredentials
@@ -93,6 +117,7 @@ async function applyHouseholdCredentials(nextCredentials: HouseholdCredential[])
 
   householdCredentials.value = credentialsToStore;
   await setStoredHouseholdCredentials(credentialsToStore);
+  refreshRealtimeConnection();
 
   if (!credentialsToStore.length) {
     clearAvailableLlmModels();
@@ -217,6 +242,7 @@ onMounted(() => {
 
     const storedLlmModel = await getStoredLlmModel();
     householdCredentials.value = await getStoredHouseholdCredentials();
+    refreshRealtimeConnection();
 
     if (householdCredentials.value.length) {
       void loadAvailableLlmModels(storedLlmModel);
@@ -236,6 +262,10 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("popstate", handlePopState);
   window.removeEventListener("keydown", handleGlobalKeyDown);
+  closeRealtimeConnection();
+  if (realtimeRefreshTimer !== null) {
+    window.clearTimeout(realtimeRefreshTimer);
+  }
   document.body.style.overflow = "";
 });
 </script>

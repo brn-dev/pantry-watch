@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { PantryItem as Item, PantryLocation as Location } from "@shared/models";
+import { notifyHouseholdChanged } from "../realtime.js";
 import {
   addPantryItem,
   deletePantryItem,
@@ -75,6 +76,7 @@ pantryItemsRouter.post("/locations/:locationId/items", async (req, res) => {
   };
 
   await addPantryItem(household.id, location.id, item);
+  notifyHouseholdChanged(household.id, "pantry-items");
   res.status(201).json(item);
 });
 
@@ -149,11 +151,13 @@ pantryItemsRouter.patch("/items/:itemId", async (req, res) => {
     }
 
     await movePantryItem(household.id, item.id, item, targetLocation.id);
+    notifyHouseholdChanged(household.id, "pantry-items");
     res.json(item);
     return;
   }
 
   await updatePantryItem(household.id, item.id, item);
+  notifyHouseholdChanged(household.id, "pantry-items");
   res.json(item);
 });
 
@@ -169,6 +173,7 @@ pantryItemsRouter.delete("/items/:itemId", async (req, res) => {
     if (itemIndex >= 0) {
       const deletedItem = location.items[itemIndex];
       await deletePantryItem(household.id, deletedItem.id);
+      notifyHouseholdChanged(household.id, "pantry-items");
       res.json(deletedItem);
       return;
     }

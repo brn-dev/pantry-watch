@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { PantryLocation as Location } from "@shared/models";
+import { notifyHouseholdChanged } from "../realtime.js";
 import { addLocation, deleteLocation, findHousehold, findLocation, makeId, normalizeText, renameLocation } from "../store.js";
 
 type CreateLocationBody = {
@@ -48,6 +49,7 @@ locationsRouter.post("/", async (req, res) => {
     return;
   }
 
+  notifyHouseholdChanged(household.id, "locations");
   res.status(201).json(location);
 });
 
@@ -85,6 +87,7 @@ locationsRouter.patch("/:locationId", async (req, res) => {
     return;
   }
 
+  notifyHouseholdChanged(household.id, "locations");
   res.json({ ...location, name: nextName });
 });
 
@@ -103,5 +106,6 @@ locationsRouter.delete("/:locationId", async (req, res) => {
 
   const deletedLocation = household.locations[locationIndex];
   await deleteLocation(household.id, deletedLocation.id);
+  notifyHouseholdChanged(household.id, "locations");
   res.json(deletedLocation);
 });
