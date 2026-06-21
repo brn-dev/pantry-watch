@@ -687,85 +687,100 @@ async function sendMessage(): Promise<void> {
     sendingMessage.value = false;
   }
 }
+
+function handleMessageKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Enter" || event.shiftKey) {
+    return;
+  }
+
+  event.preventDefault();
+  if (sendingMessage.value) {
+    return;
+  }
+
+  void sendMessage();
+}
 </script>
 
 <template>
   <RoughPanel class="w-full max-w-full">
     <div class="space-y-4">
-    <div class="space-y-3 rounded-md border border-[#7f6a55]/35 bg-[#fffaf0]/80 p-3">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 class="text-lg font-semibold text-[#3f3225]">{{ t(props.language, "aiChefPastChats") }}</h3>
-          <p class="text-xs text-[#6a5b4c]">
-            {{ activeChat ? t(props.language, "aiChefContinuingSelectedChat") : t(props.language, "aiChefStartingNewChat") }}
-          </p>
-        </div>
+      <RoughPanel fill="rgba(255, 250, 240, 0.8)">
+        <div class="space-y-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-[#3f3225]">{{ t(props.language, "aiChefPastChats") }}</h3>
+              <p class="text-xs text-[#6a5b4c]">
+                {{ activeChat ? t(props.language, "aiChefContinuingSelectedChat") : t(props.language, "aiChefStartingNewChat") }}
+              </p>
+            </div>
 
-        <div class="flex flex-wrap gap-2">
-          <RoughButton
-            class="px-3 py-2 text-xs font-medium"
-            :disabled="sendingMessage"
-            @click="startNewChat"
-          >
-            {{ t(props.language, "aiChefNewChat") }}
-          </RoughButton>
-          <RoughButton
-            class="px-3 py-2 text-xs font-medium"
-            :disabled="loadingSavedChats || sendingMessage"
-            @click="loadSavedChats"
-          >
-            {{ t(props.language, "aiChefRefreshChats") }}
-          </RoughButton>
-        </div>
-      </div>
+            <div class="flex flex-wrap gap-2">
+              <RoughButton
+                class="px-3 py-2 text-xs font-medium"
+                :disabled="sendingMessage"
+                @click="startNewChat"
+              >
+                {{ t(props.language, "aiChefNewChat") }}
+              </RoughButton>
+              <RoughButton
+                class="px-3 py-2 text-xs font-medium"
+                :disabled="loadingSavedChats || sendingMessage"
+                @click="loadSavedChats"
+              >
+                {{ t(props.language, "aiChefRefreshChats") }}
+              </RoughButton>
+            </div>
+          </div>
 
-      <p v-if="loadingSavedChats" class="scribble-text text-[#1f5872]">{{ t(props.language, "aiChefLoadingChats") }}</p>
-      <p v-if="savedChatsError" class="scribble-text font-medium text-[#8f2e2e]">{{ savedChatsError }}</p>
+          <p v-if="loadingSavedChats" class="scribble-text text-[#1f5872]">{{ t(props.language, "aiChefLoadingChats") }}</p>
+          <p v-if="savedChatsError" class="scribble-text font-medium text-[#8f2e2e]">{{ savedChatsError }}</p>
 
-      <div v-if="savedChats.length" class="mobile-scrollbar flex gap-2 overflow-x-auto pb-1">
-        <button
-          v-for="chat in savedChats"
-          :key="chat.id"
-          type="button"
-          class="min-w-52 max-w-72 rounded-md border px-3 py-2 text-left text-sm transition"
-          :class="
-            chat.id === activeChatId
-              ? 'border-[#536f84] bg-[#ecf6ff] text-[#274357]'
-              : 'border-[#7f6a55]/35 bg-[#fffdf4] text-[#4f4134]'
-          "
-          :disabled="sendingMessage"
-          @click="openSavedChat(chat)"
-        >
-          <span class="block truncate font-semibold">{{ getChatTitle(chat) }}</span>
-          <span class="block truncate text-xs text-[#6a5b4c]">{{ getChatTimestamp(chat) }}</span>
-          <span class="block text-xs text-[#6a5b4c]">{{ t(props.language, "aiChefMessageCount", { count: chat.messages.length }) }}</span>
-        </button>
-      </div>
-
-      <p v-else-if="!loadingSavedChats" class="scribble-text text-[#6a5b4c]">{{ t(props.language, "aiChefNoSavedChats") }}</p>
-    </div>
-
-    <div class="rounded-md border border-[#7f6a55]/35 bg-[#fffaf0]/80 p-2">
-      <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div class="min-w-0">
-          <p class="mb-1 text-sm font-semibold text-[#4f4134]">{{ t(props.language, "households") }}</p>
-          <div class="flex flex-wrap gap-1.5">
-            <label
-              v-for="household in households"
-              :key="household.id"
-              class="inline-flex cursor-pointer items-center gap-1.5 rounded border border-[#7f6a55]/35 bg-[#fffdf4] px-2 py-1 text-xs"
+          <div v-if="savedChats.length" class="mobile-scrollbar flex gap-2 overflow-x-auto pb-1">
+            <button
+              v-for="chat in savedChats"
+              :key="chat.id"
+              type="button"
+              class="min-w-52 max-w-72 rounded-md border px-3 py-2 text-left text-sm transition"
+              :class="
+                chat.id === activeChatId
+                  ? 'border-[#536f84] bg-[#ecf6ff] text-[#274357]'
+                  : 'border-[#7f6a55]/35 bg-[#fffdf4] text-[#4f4134]'
+              "
+              :disabled="sendingMessage"
+              @click="openSavedChat(chat)"
             >
-              <input
-                type="checkbox"
-                class="h-3.5 w-3.5"
-                :checked="isHouseholdSelected(household.id)"
-                @change="toggleHousehold(household.id)"
-              />
-              <span class="max-w-36 truncate">{{ household.name }}</span>
-            </label>
+              <span class="block truncate font-semibold">{{ getChatTitle(chat) }}</span>
+              <span class="block truncate text-xs text-[#6a5b4c]">{{ getChatTimestamp(chat) }}</span>
+              <span class="block text-xs text-[#6a5b4c]">{{ t(props.language, "aiChefMessageCount", { count: chat.messages.length }) }}</span>
+            </button>
+          </div>
+
+          <p v-else-if="!loadingSavedChats" class="scribble-text text-[#6a5b4c]">{{ t(props.language, "aiChefNoSavedChats") }}</p>
+        </div>
+      </RoughPanel>
+
+      <RoughPanel fill="rgba(255, 250, 240, 0.8)">
+        <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div class="min-w-0">
+            <p class="mb-1 text-sm font-semibold text-[#4f4134]">{{ t(props.language, "households") }}</p>
+            <div class="flex flex-wrap gap-1.5">
+              <label
+                v-for="household in households"
+                :key="household.id"
+                class="inline-flex cursor-pointer items-center gap-1.5 rounded border border-[#7f6a55]/35 bg-[#fffdf4] px-2 py-1 text-xs"
+              >
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5"
+                  :checked="isHouseholdSelected(household.id)"
+                  @change="toggleHousehold(household.id)"
+                />
+                <span class="max-w-36 truncate">{{ household.name }}</span>
+              </label>
+            </div>
           </div>
         </div>
-      </div>
 
       <div class="mt-2 border-t border-[#7f6a55]/25 pt-2">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -818,7 +833,7 @@ async function sendMessage(): Promise<void> {
           </label>
         </div>
       </div>
-    </div>
+    </RoughPanel>
 
     <RoughPanel class="space-y-3" fill="rgba(255, 250, 239, 0.78)">
       <h3 class="text-2xl font-semibold text-[#3f3225]">{{ t(props.language, "aiChefChat") }}</h3>
@@ -853,6 +868,7 @@ async function sendMessage(): Promise<void> {
           rows="3"
           class="mt-1 w-full px-3 py-2 text-sm"
           :placeholder="t(props.language, 'aiChefMessagePlaceholder')"
+          @keydown="handleMessageKeydown"
         />
       </label>
 
